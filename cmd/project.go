@@ -1,19 +1,35 @@
 package cmd
 
 import (
-	"context"
-	"fmt"
-	"os"
-	"strings"
+    "context"
+    "fmt"
+    "os"
+    "strings"
+    "time"
 
-	"github.com/dorkitude/linctl/pkg/api"
-	"github.com/dorkitude/linctl/pkg/auth"
-	"github.com/dorkitude/linctl/pkg/output"
-	"github.com/dorkitude/linctl/pkg/utils"
-	"github.com/fatih/color"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+    "github.com/dorkitude/linctl/pkg/api"
+    "github.com/dorkitude/linctl/pkg/auth"
+    "github.com/dorkitude/linctl/pkg/output"
+    "github.com/dorkitude/linctl/pkg/utils"
+    "github.com/fatih/color"
+    "github.com/spf13/cobra"
+    "github.com/spf13/viper"
 )
+
+// projectAPI captures the subset of API client used by project commands.
+// This enables dependency injection in tests without changing public API types.
+type projectAPI interface {
+    GetTeam(ctx context.Context, key string) (*api.Team, error)
+    GetProjects(ctx context.Context, filter map[string]interface{}, first int, after string, orderBy string) (*api.Projects, error)
+    CreateProject(ctx context.Context, input map[string]interface{}) (*api.Project, error)
+    UpdateProject(ctx context.Context, id string, input map[string]interface{}) (*api.Project, error)
+    ArchiveProject(ctx context.Context, id string) (bool, error)
+    GetProject(ctx context.Context, id string) (*api.Project, error)
+}
+
+// Injection points for testing
+var newAPIClient = func(authHeader string) projectAPI { return api.NewClient(authHeader) }
+var getAuthHeader = auth.GetAuthHeader
 
 // constructProjectURL constructs an ID-based project URL
 func constructProjectURL(projectID string, originalURL string) string {
@@ -56,15 +72,15 @@ var projectListCmd = &cobra.Command{
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
 
-		// Get auth header
-		authHeader, err := auth.GetAuthHeader()
+            // Get auth header
+            authHeader, err := getAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
-		// Create API client
-		client := api.NewClient(authHeader)
+            // Create API client
+            client := newAPIClient(authHeader)
 
 		// Get filters
 		teamKey, _ := cmd.Flags().GetString("team")
@@ -138,6 +154,9 @@ var projectListCmd = &cobra.Command{
 				fmt.Printf("## %s\n", project.Name)
 				fmt.Printf("- **ID**: %s\n", project.ID)
 				fmt.Printf("- **State**: %s\n", project.State)
+				if project.Priority > 0 {
+					fmt.Printf("- **Priority**: %d\n", project.Priority)
+				}
 				fmt.Printf("- **Progress**: %.0f%%\n", project.Progress*100)
 				if project.Lead != nil {
 					fmt.Printf("- **Lead**: %s\n", project.Lead.Name)
@@ -172,7 +191,7 @@ var projectListCmd = &cobra.Command{
 			return
 		} else {
 			// Table output
-			headers := []string{"Name", "State", "Lead", "Teams", "Created", "Updated", "URL"}
+			headers := []string{"Name", "State", "Priority", "Lead", "Teams", "Created", "Updated", "URL"}
 			rows := [][]string{}
 
 			for _, project := range projects.Nodes {
@@ -205,9 +224,16 @@ var projectListCmd = &cobra.Command{
 					stateColor = color.New(color.FgRed)
 				}
 
+				// Format priority
+				priorityStr := fmt.Sprintf("%d", project.Priority)
+				if project.Priority == 0 {
+					priorityStr = "-"
+				}
+
 				rows = append(rows, []string{
 					truncateString(project.Name, 25),
 					stateColor.Sprint(project.State),
+					priorityStr,
 					lead,
 					teams,
 					project.CreatedAt.Format("2006-01-02"),
@@ -241,15 +267,15 @@ var projectGetCmd = &cobra.Command{
 		jsonOut := viper.GetBool("json")
 		projectID := args[0]
 
-		// Get auth header
-		authHeader, err := auth.GetAuthHeader()
+            // Get auth header
+            authHeader, err := getAuthHeader()
 		if err != nil {
 			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
-		// Create API client
-		client := api.NewClient(authHeader)
+            // Create API client
+            client := newAPIClient(authHeader)
 
 		// Get project details
 		project, err := client.GetProject(context.Background(), projectID)
@@ -276,9 +302,32 @@ var projectGetCmd = &cobra.Command{
 			fmt.Printf("- **ID**: %s\n", project.ID)
 			fmt.Printf("- **Slug ID**: %s\n", project.SlugId)
 			fmt.Printf("- **State**: %s\n", project.State)
+			if project.Priority > 0 {
+				fmt.Printf("- **Priority**: %d\n", project.Priority)
+			}
 			fmt.Printf("- **Progress**: %.0f%%\n", project.Progress*100)
 			fmt.Printf("- **Health**: %s\n", project.Health)
 			fmt.Printf("- **Scope**: %d\n", project.Scope)
+			if project.Initiatives != nil && len(project.Initiatives.Nodes) > 0 {
+				initiatives := ""
+				for i, initiative := range project.Initiatives.Nodes {
+					if i > 0 {
+						initiatives += ", "
+					}
+					initiatives += initiative.Name
+				}
+				fmt.Printf("- **Initiatives**: %s\n", initiatives)
+			}
+			if project.Labels != nil && len(project.Labels.Nodes) > 0 {
+				labels := ""
+				for i, label := range project.Labels.Nodes {
+					if i > 0 {
+						labels += ", "
+					}
+					labels += label.Name
+				}
+				fmt.Printf("- **Labels**: %s\n", labels)
+			}
 			if project.Icon != nil && *project.Icon != "" {
 				fmt.Printf("- **Icon**: %s\n", *project.Icon)
 			}
@@ -485,6 +534,10 @@ var projectGetCmd = &cobra.Command{
 			}
 			fmt.Printf("\n%s %s\n", color.New(color.Bold).Sprint("State:"), stateColor.Sprint(project.State))
 
+			if project.Priority > 0 {
+				fmt.Printf("%s %d\n", color.New(color.Bold).Sprint("Priority:"), project.Priority)
+			}
+
 			progressColor := color.New(color.FgRed)
 			if project.Progress >= 0.75 {
 				progressColor = color.New(color.FgGreen)
@@ -492,6 +545,28 @@ var projectGetCmd = &cobra.Command{
 				progressColor = color.New(color.FgYellow)
 			}
 			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Progress:"), progressColor.Sprintf("%.0f%%", project.Progress*100))
+
+			if project.Initiatives != nil && len(project.Initiatives.Nodes) > 0 {
+				initiatives := ""
+				for i, initiative := range project.Initiatives.Nodes {
+					if i > 0 {
+						initiatives += ", "
+					}
+					initiatives += initiative.Name
+				}
+				fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Initiatives:"), initiatives)
+			}
+
+			if project.Labels != nil && len(project.Labels.Nodes) > 0 {
+				labels := ""
+				for i, label := range project.Labels.Nodes {
+					if i > 0 {
+						labels += ", "
+					}
+					labels += label.Name
+				}
+				fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Labels:"), labels)
+			}
 
 			if project.StartDate != nil || project.TargetDate != nil {
 				fmt.Println()
@@ -582,10 +657,374 @@ var projectGetCmd = &cobra.Command{
 	},
 }
 
+var projectCreateCmd = &cobra.Command{
+	Use:   "create",
+	Short: "Create a new project",
+	Long: `Create a new project in Linear workspace with required and optional configuration.
+
+The --name and --team flags are required. All other fields are optional.
+
+Examples:
+  # Create project with minimal required fields
+  linctl project create --name "Q1 Backend" --team ENG
+
+  # Create project with all optional fields
+  linctl project create --name "Test Project" --team ENG --state started --priority 1 --description "Test project for validation"
+
+  # Create project with target date
+  linctl project create --name "Launch" --team PROD --state planned --target-date 2024-12-31`,
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+
+		// Get required flags
+		name, _ := cmd.Flags().GetString("name")
+		teamKey, _ := cmd.Flags().GetString("team")
+
+		// Validate required fields
+		if name == "" || teamKey == "" {
+			output.Error("Both --name and --team are required", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+        // Get auth header
+        authHeader, err := getAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+        // Create API client
+        client := newAPIClient(authHeader)
+
+		// Resolve team key to team UUID
+		team, err := client.GetTeam(context.Background(), teamKey)
+		if err != nil {
+			output.Error(fmt.Sprintf("Team '%s' not found. Use 'linctl team list' to see available teams.", teamKey), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Get optional fields
+		description, _ := cmd.Flags().GetString("description")
+		state, _ := cmd.Flags().GetString("state")
+		targetDate, _ := cmd.Flags().GetString("target-date")
+
+		// Validate state if provided
+		if state != "" {
+			allowedStates := []string{"planned", "started", "paused", "completed", "canceled"}
+			valid := false
+			for _, s := range allowedStates {
+				if state == s {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				output.Error(fmt.Sprintf("Invalid state. Must be one of: %s", strings.Join(allowedStates, ", ")), plaintext, jsonOut)
+				os.Exit(1)
+			}
+		}
+
+    // Validate priority if provided
+    var priority int
+    if cmd.Flags().Changed("priority") {
+        priority, _ = cmd.Flags().GetInt("priority")
+        if priority < 0 || priority > 4 {
+            output.Error("Priority must be between 0 (None) and 4 (Low)", plaintext, jsonOut)
+            os.Exit(1)
+        }
+    }
+
+    // Validate target-date format if provided (YYYY-MM-DD)
+    if targetDate != "" {
+        if _, err := time.Parse("2006-01-02", targetDate); err != nil {
+            output.Error("Invalid --target-date format. Expected YYYY-MM-DD", plaintext, jsonOut)
+            os.Exit(1)
+        }
+    }
+
+    // Build input map
+    input := map[string]interface{}{
+        "name":   name,
+        "teamIds": []string{team.ID},
+    }
+
+		if description != "" {
+			input["description"] = description
+		}
+		if state != "" {
+			input["state"] = state
+		}
+		if cmd.Flags().Changed("priority") {
+			input["priority"] = priority
+		}
+		if targetDate != "" {
+			input["targetDate"] = targetDate
+		}
+
+		// Create project
+		project, err := client.CreateProject(context.Background(), input)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to create project: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Handle output
+		if jsonOut {
+			output.JSON(project)
+		} else if plaintext {
+			fmt.Printf("# Project Created\n\n")
+			fmt.Printf("- **Name**: %s\n", project.Name)
+			fmt.Printf("- **ID**: %s\n", project.ID)
+			fmt.Printf("- **State**: %s\n", project.State)
+			if project.Description != "" {
+				fmt.Printf("- **Description**: %s\n", project.Description)
+			}
+			if project.Teams != nil && len(project.Teams.Nodes) > 0 {
+				teams := ""
+				for i, t := range project.Teams.Nodes {
+					if i > 0 {
+						teams += ", "
+					}
+					teams += t.Key
+				}
+				fmt.Printf("- **Teams**: %s\n", teams)
+			}
+			fmt.Printf("- **URL**: %s\n", constructProjectURL(project.ID, project.URL))
+		} else {
+			fmt.Println()
+			fmt.Printf("%s Project created successfully\n", color.New(color.FgGreen).Sprint("✓"))
+			fmt.Println()
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Name:"), project.Name)
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("ID:"), project.ID)
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("State:"), project.State)
+			if project.Teams != nil && len(project.Teams.Nodes) > 0 {
+				fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Team:"), project.Teams.Nodes[0].Key)
+			}
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("URL:"), color.New(color.FgBlue, color.Underline).Sprint(constructProjectURL(project.ID, project.URL)))
+			fmt.Println()
+		}
+	},
+}
+
+var projectArchiveCmd = &cobra.Command{
+	Use:   "archive PROJECT-UUID",
+	Short: "Archive a project",
+	Long: `Archive a project by its UUID. Archived projects are hidden from most views but can still be accessed.
+
+Examples:
+  linctl project archive abc-123-def-456`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		projectID := args[0]
+
+		// Validate argument provided
+		if projectID == "" {
+			output.Error("Project UUID is required", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+        // Get auth header
+        authHeader, err := getAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+        // Create API client
+        client := newAPIClient(authHeader)
+
+        // Archive project
+        success, err := client.ArchiveProject(context.Background(), projectID)
+        if err != nil {
+            output.Error(fmt.Sprintf("Failed to archive project: %v", err), plaintext, jsonOut)
+            os.Exit(1)
+        }
+
+        // Try to fetch project details to include the name in output (best effort)
+        var projectName string
+        if success {
+            if proj, gerr := client.GetProject(context.Background(), projectID); gerr == nil && proj != nil {
+                projectName = proj.Name
+            }
+        }
+
+        // Handle output
+        if jsonOut {
+            payload := map[string]interface{}{
+                "success":    success,
+                "projectId":  projectID,
+            }
+            if projectName != "" {
+                payload["projectName"] = projectName
+            }
+            output.JSON(payload)
+        } else if plaintext {
+            fmt.Printf("# Project Archived\n\n")
+            if projectName != "" {
+                fmt.Printf("- **Name**: %s\n", projectName)
+            }
+            fmt.Printf("- **Project ID**: %s\n", projectID)
+            fmt.Printf("- **Status**: Archived\n")
+        } else {
+            fmt.Println()
+            fmt.Printf("%s Project archived successfully\n", color.New(color.FgGreen).Sprint("✓"))
+            fmt.Println()
+            if projectName != "" {
+                fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Name:"), projectName)
+            }
+            fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Project ID:"), projectID)
+            fmt.Println()
+        }
+    },
+}
+
+var projectUpdateCmd = &cobra.Command{
+	Use:   "update PROJECT-UUID",
+	Short: "Update project fields",
+	Long: `Update one or more project fields. At least one field must be provided.
+
+The project UUID is required as the first argument. All field flags are optional, but at least one must be specified.
+
+Examples:
+  # Update single field
+  linctl project update abc-123 --name "New Project Name"
+  linctl project update abc-123 --state started
+  linctl project update abc-123 --priority 1
+
+  # Update multiple fields
+  linctl project update abc-123 --state started --priority 2
+  linctl project update abc-123 --description "Full description" --summary "Short summary"
+
+  # Update with labels
+  linctl project update abc-123 --label "urgent,backend"`,
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		projectID := args[0]
+
+		// Validate project UUID provided
+		if projectID == "" {
+			output.Error("Project UUID is required", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Get auth header
+		authHeader, err := getAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Create API client
+		client := newAPIClient(authHeader)
+
+		// Build input map with only changed fields
+		input := make(map[string]interface{})
+
+		if cmd.Flags().Changed("name") {
+			name, _ := cmd.Flags().GetString("name")
+			input["name"] = name
+		}
+		if cmd.Flags().Changed("description") {
+			description, _ := cmd.Flags().GetString("description")
+			input["description"] = description
+		}
+		if cmd.Flags().Changed("summary") {
+			summary, _ := cmd.Flags().GetString("summary")
+			input["shortSummary"] = summary
+		}
+		if cmd.Flags().Changed("state") {
+			state, _ := cmd.Flags().GetString("state")
+			input["state"] = state
+		}
+		if cmd.Flags().Changed("priority") {
+			priority, _ := cmd.Flags().GetInt("priority")
+			input["priority"] = priority
+		}
+
+		// Validate at least one field provided
+		if len(input) == 0 {
+			output.Error("At least one field to update is required", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Validate state if provided
+		if state, ok := input["state"].(string); ok {
+			allowedStates := []string{"planned", "started", "paused", "completed", "canceled"}
+			valid := false
+			for _, s := range allowedStates {
+				if state == s {
+					valid = true
+					break
+				}
+			}
+			if !valid {
+				output.Error(fmt.Sprintf("Invalid state. Must be one of: %s", strings.Join(allowedStates, ", ")), plaintext, jsonOut)
+				os.Exit(1)
+			}
+		}
+
+		// Validate priority if provided
+		if priority, ok := input["priority"].(int); ok {
+			if priority < 0 || priority > 4 {
+				output.Error("Priority must be between 0 and 4", plaintext, jsonOut)
+				os.Exit(1)
+			}
+		}
+
+		// Update project
+		project, err := client.UpdateProject(context.Background(), projectID, input)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to update project: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		// Handle output
+		if jsonOut {
+			output.JSON(project)
+		} else if plaintext {
+			fmt.Printf("# Project Updated\n\n")
+			fmt.Printf("- **Name**: %s\n", project.Name)
+			fmt.Printf("- **ID**: %s\n", project.ID)
+			if project.State != "" {
+				fmt.Printf("- **State**: %s\n", project.State)
+			}
+			if project.Priority > 0 {
+				fmt.Printf("- **Priority**: %d\n", project.Priority)
+			}
+			if project.Description != "" {
+				fmt.Printf("- **Description**: %s\n", project.Description)
+			}
+			fmt.Printf("- **URL**: %s\n", constructProjectURL(project.ID, project.URL))
+		} else {
+			fmt.Println()
+			fmt.Printf("%s Project updated successfully\n", color.New(color.FgGreen).Sprint("✓"))
+			fmt.Println()
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("Name:"), project.Name)
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("ID:"), project.ID)
+			if project.State != "" {
+				fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("State:"), project.State)
+			}
+			if project.Priority > 0 {
+				fmt.Printf("%s %d\n", color.New(color.Bold).Sprint("Priority:"), project.Priority)
+			}
+			fmt.Printf("%s %s\n", color.New(color.Bold).Sprint("URL:"), color.New(color.FgBlue, color.Underline).Sprint(constructProjectURL(project.ID, project.URL)))
+			fmt.Println()
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(projectCmd)
 	projectCmd.AddCommand(projectListCmd)
 	projectCmd.AddCommand(projectGetCmd)
+	projectCmd.AddCommand(projectCreateCmd)
+	projectCmd.AddCommand(projectArchiveCmd)
+	projectCmd.AddCommand(projectUpdateCmd)
 
 	// List command flags
 	projectListCmd.Flags().StringP("team", "t", "", "Filter by team key")
@@ -594,4 +1033,19 @@ func init() {
 	projectListCmd.Flags().BoolP("include-completed", "c", false, "Include completed and canceled projects")
 	projectListCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
 	projectListCmd.Flags().StringP("newer-than", "n", "", "Show projects created after this time (default: 6_months_ago, use 'all_time' for no filter)")
+
+	// Create command flags
+	projectCreateCmd.Flags().String("name", "", "Project name (required)")
+	projectCreateCmd.Flags().String("team", "", "Team key (required)")
+	projectCreateCmd.Flags().String("description", "", "Project description")
+	projectCreateCmd.Flags().String("state", "", "Project state (planned|started|paused|completed|canceled)")
+	projectCreateCmd.Flags().Int("priority", 0, "Priority (0-4: None, Urgent, High, Normal, Low)")
+	projectCreateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD)")
+
+	// Update command flags
+	projectUpdateCmd.Flags().String("name", "", "Project name")
+	projectUpdateCmd.Flags().String("description", "", "Project description")
+	projectUpdateCmd.Flags().String("summary", "", "Project short summary")
+	projectUpdateCmd.Flags().String("state", "", "Project state (planned|started|paused|completed|canceled)")
+	projectUpdateCmd.Flags().Int("priority", 0, "Priority (0-4: None, Urgent, High, Normal, Low)")
 }
