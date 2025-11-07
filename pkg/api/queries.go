@@ -1,9 +1,10 @@
 package api
 
 import (
-	"context"
-	"encoding/json"
-	"time"
+    "context"
+    "encoding/json"
+    "fmt"
+    "time"
 )
 
 // User represents a Linear user
@@ -97,11 +98,14 @@ type Project struct {
 	Name        string     `json:"name"`
 	Description string     `json:"description"`
 	State       string     `json:"state"`
+	Priority    int        `json:"priority"`
 	Progress    float64    `json:"progress"`
 	StartDate   *string    `json:"startDate"`
 	TargetDate  *string    `json:"targetDate"`
-	Lead        *User      `json:"lead"`
-	Teams       *Teams     `json:"teams"`
+	Lead        *User         `json:"lead"`
+	Teams       *Teams        `json:"teams"`
+	Initiatives *Initiatives  `json:"initiatives"`
+	Labels      *Labels       `json:"labels"`
 	URL         string     `json:"url"`
 	Icon        *string    `json:"icon"`
 	Color       string     `json:"color"`
@@ -124,7 +128,27 @@ type Project struct {
 	Scope               int             `json:"scope"`
 	SlackNewIssue       bool            `json:"slackNewIssue"`
 	SlackIssueComments  bool            `json:"slackIssueComments"`
-	SlackIssueStatuses  bool            `json:"slackIssueStatuses"`
+    SlackIssueStatuses  bool            `json:"slackIssueStatuses"`
+}
+
+// ProjectMilestone represents a milestone within a project
+type ProjectMilestone struct {
+    ID          string     `json:"id"`
+    Name        string     `json:"name"`
+    Description string     `json:"description"`
+    TargetDate  *string    `json:"targetDate"`
+    Status      string     `json:"status"`
+    Progress    float64    `json:"progress"`
+    SortOrder   float64    `json:"sortOrder"`
+    Project     *Project   `json:"project"`
+    CreatedAt   time.Time  `json:"createdAt"`
+    UpdatedAt   time.Time  `json:"updatedAt"`
+    ArchivedAt  *time.Time `json:"archivedAt"`
+}
+
+// ProjectMilestones represents a collection of project milestones
+type ProjectMilestones struct {
+    Nodes []ProjectMilestone `json:"nodes"`
 }
 
 // Paginated collections
@@ -228,6 +252,10 @@ type Initiative struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
+}
+
+type Initiatives struct {
+	Nodes []Initiative `json:"nodes"`
 }
 
 type PageInfo struct {
@@ -428,6 +456,10 @@ func (c *Client) GetIssues(ctx context.Context, filter map[string]interface{}, f
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -499,6 +531,10 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 					team {
 						id
 						key
+						name
+					}
+					project {
+						id
 						name
 					}
 					labels {
@@ -872,6 +908,7 @@ func (c *Client) GetProjects(ctx context.Context, filter map[string]interface{},
 					name
 					description
 					state
+					priority
 					progress
 					startDate
 					targetDate
@@ -935,6 +972,7 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 				description
 				content
 				state
+				priority
 				progress
 				health
 				scope
@@ -951,6 +989,19 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 				slackNewIssue
 				slackIssueComments
 				slackIssueStatuses
+				initiatives {
+					nodes {
+						id
+						name
+					}
+				}
+				labels {
+					nodes {
+						id
+						name
+						color
+					}
+				}
 				lead {
 					id
 					name
@@ -1112,6 +1163,10 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -1174,6 +1229,10 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 						key
 						name
 					}
+					project {
+						id
+						name
+					}
 					labels {
 						nodes {
 							id
@@ -1204,35 +1263,61 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 	return &response.IssueCreate.Issue, nil
 }
 
-// GetTeam returns a single team by key
+// GetTeam returns a single team by key; falls back to id lookup if not found
 func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
-	query := `
-		query Team($key: String!) {
-			team(id: $key) {
-				id
-				key
-				name
-				description
-				private
-				issueCount
-			}
-		}
-	`
+    // First, attempt lookup by team key via teams connection
+    queryByKey := `
+        query TeamByKey($key: String!) {
+            teams(filter: { key: { eq: $key } }, first: 1) {
+                nodes {
+                    id
+                    key
+                    name
+                    description
+                    private
+                    issueCount
+                }
+            }
+        }
+    `
 
-	variables := map[string]interface{}{
-		"key": key,
-	}
+    variables := map[string]interface{}{"key": key}
 
-	var response struct {
-		Team Team `json:"team"`
-	}
+    var respByKey struct {
+        Teams struct {
+            Nodes []Team `json:"nodes"`
+        } `json:"teams"`
+    }
 
-	err := c.Execute(ctx, query, variables, &response)
-	if err != nil {
-		return nil, err
-	}
+    if err := c.Execute(ctx, queryByKey, variables, &respByKey); err == nil {
+        if len(respByKey.Teams.Nodes) > 0 {
+            t := respByKey.Teams.Nodes[0]
+            return &t, nil
+        }
+    }
 
-	return &response.Team, nil
+    // Fallback: try direct id lookup (in case caller passed an ID)
+    queryByID := `
+        query TeamByID($id: String!) {
+            team(id: $id) {
+                id
+                key
+                name
+                description
+                private
+                issueCount
+            }
+        }
+    `
+
+    var respByID struct {
+        Team *Team `json:"team"`
+    }
+    if err := c.Execute(ctx, queryByID, map[string]interface{}{"id": key}, &respByID); err == nil && respByID.Team != nil {
+        return respByID.Team, nil
+    }
+
+    return nil, fmt.Errorf("team '%s' not found", key)
 }
 
 // Comment represents a Linear comment
@@ -1512,4 +1597,353 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// CreateProject creates a new project
+func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation CreateProject($input: ProjectCreateInput!) {
+			projectCreate(input: $input) {
+				success
+				project {
+					id
+					name
+					description
+					state
+					progress
+					startDate
+					targetDate
+					url
+					icon
+					color
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		ProjectCreate struct {
+			Success bool    `json:"success"`
+			Project Project `json:"project"`
+		} `json:"projectCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ProjectCreate.Project, nil
+}
+
+// ArchiveProject archives a project by ID
+func (c *Client) ArchiveProject(ctx context.Context, id string) (bool, error) {
+	query := `
+		mutation ArchiveProject($id: String!) {
+			projectArchive(id: $id) {
+				success
+				project {
+					id
+					name
+					archivedAt
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		ProjectArchive struct {
+			Success bool    `json:"success"`
+			Project Project `json:"project"`
+		} `json:"projectArchive"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return false, err
+	}
+
+	return response.ProjectArchive.Success, nil
+}
+
+// UpdateProject updates a project by ID with partial field updates
+func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]interface{}) (*Project, error) {
+	query := `
+		mutation UpdateProject($id: String!, $input: ProjectUpdateInput!) {
+			projectUpdate(id: $id, input: $input) {
+				success
+				project {
+					id
+					name
+					description
+					state
+					priority
+					progress
+					startDate
+					targetDate
+					url
+					icon
+					color
+					createdAt
+					updatedAt
+					lead {
+						id
+						name
+						email
+					}
+					teams {
+						nodes {
+							id
+							key
+							name
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var response struct {
+		ProjectUpdate struct {
+			Success bool    `json:"success"`
+			Project Project `json:"project"`
+		} `json:"projectUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.ProjectUpdate.Project, nil
+}
+
+// ListProjectMilestones returns milestones for a specific project
+func (c *Client) ListProjectMilestones(ctx context.Context, projectID string, includeArchived bool) (*ProjectMilestones, error) {
+    query := `
+        query ProjectMilestones($projectId: String!, $includeArchived: Boolean) {
+            project(id: $projectId) {
+                projectMilestones(includeArchived: $includeArchived) {
+                    nodes {
+                        id
+                        name
+                        description
+                        targetDate
+                        status
+                        progress
+                        sortOrder
+                        createdAt
+                        updatedAt
+                        archivedAt
+                    }
+                }
+            }
+        }
+    `
+
+    variables := map[string]interface{}{
+        "projectId":       projectID,
+        "includeArchived": includeArchived,
+    }
+
+    var response struct {
+        Project struct {
+            ProjectMilestones ProjectMilestones `json:"projectMilestones"`
+        } `json:"project"`
+    }
+
+    err := c.Execute(ctx, query, variables, &response)
+    if err != nil {
+        return nil, err
+    }
+
+    return &response.Project.ProjectMilestones, nil
+}
+
+// GetProjectMilestone returns a specific project milestone
+func (c *Client) GetProjectMilestone(ctx context.Context, milestoneID string) (*ProjectMilestone, error) {
+    query := `
+        query ProjectMilestone($id: String!) {
+            projectMilestone(id: $id) {
+                id
+                name
+                description
+                targetDate
+                status
+                progress
+                sortOrder
+                createdAt
+                updatedAt
+                archivedAt
+                project {
+                    id
+                    name
+                }
+            }
+        }
+    `
+
+    variables := map[string]interface{}{
+        "id": milestoneID,
+    }
+
+    var response struct {
+        ProjectMilestone ProjectMilestone `json:"projectMilestone"`
+    }
+
+    err := c.Execute(ctx, query, variables, &response)
+    if err != nil {
+        return nil, err
+    }
+
+    return &response.ProjectMilestone, nil
+}
+
+// CreateProjectMilestone creates a new project milestone
+func (c *Client) CreateProjectMilestone(ctx context.Context, input map[string]interface{}) (*ProjectMilestone, error) {
+    query := `
+        mutation CreateProjectMilestone($input: ProjectMilestoneCreateInput!) {
+            projectMilestoneCreate(input: $input) {
+                success
+                projectMilestone {
+                    id
+                    name
+                    description
+                    targetDate
+                    status
+                    progress
+                    sortOrder
+                    createdAt
+                    updatedAt
+                    project {
+                        id
+                        name
+                    }
+                }
+            }
+        }
+    `
+
+    variables := map[string]interface{}{
+        "input": input,
+    }
+
+    var response struct {
+        ProjectMilestoneCreate struct {
+            Success          bool             `json:"success"`
+            ProjectMilestone ProjectMilestone `json:"projectMilestone"`
+        } `json:"projectMilestoneCreate"`
+    }
+
+    err := c.Execute(ctx, query, variables, &response)
+    if err != nil {
+        return nil, err
+    }
+
+    return &response.ProjectMilestoneCreate.ProjectMilestone, nil
+}
+
+// UpdateProjectMilestone updates an existing project milestone
+func (c *Client) UpdateProjectMilestone(ctx context.Context, milestoneID string, input map[string]interface{}) (*ProjectMilestone, error) {
+    query := `
+        mutation UpdateProjectMilestone($id: String!, $input: ProjectMilestoneUpdateInput!) {
+            projectMilestoneUpdate(id: $id, input: $input) {
+                success
+                projectMilestone {
+                    id
+                    name
+                    description
+                    targetDate
+                    status
+                    progress
+                    sortOrder
+                    createdAt
+                    updatedAt
+                    archivedAt
+                    project {
+                        id
+                        name
+                    }
+                }
+            }
+        }
+    `
+
+    variables := map[string]interface{}{
+        "id":    milestoneID,
+        "input": input,
+    }
+
+    var response struct {
+        ProjectMilestoneUpdate struct {
+            Success          bool             `json:"success"`
+            ProjectMilestone ProjectMilestone `json:"projectMilestone"`
+        } `json:"projectMilestoneUpdate"`
+    }
+
+    err := c.Execute(ctx, query, variables, &response)
+    if err != nil {
+        return nil, err
+    }
+
+    return &response.ProjectMilestoneUpdate.ProjectMilestone, nil
+}
+
+// DeleteProjectMilestone deletes (archives) a project milestone
+func (c *Client) DeleteProjectMilestone(ctx context.Context, milestoneID string) error {
+    query := `
+        mutation DeleteProjectMilestone($id: String!) {
+            projectMilestoneDelete(id: $id) {
+                success
+            }
+        }
+    `
+
+    variables := map[string]interface{}{
+        "id": milestoneID,
+    }
+
+    var response struct {
+        ProjectMilestoneDelete struct {
+            Success bool `json:"success"`
+        } `json:"projectMilestoneDelete"`
+    }
+
+    err := c.Execute(ctx, query, variables, &response)
+    if err != nil {
+        return err
+    }
+
+    if !response.ProjectMilestoneDelete.Success {
+        return fmt.Errorf("failed to delete milestone")
+    }
+
+    return nil
 }
