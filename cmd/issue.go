@@ -379,6 +379,9 @@ var issueGetCmd = &cobra.Command{
 				if issue.Project.Description != "" {
 					fmt.Printf("- **Description**: %s\n", issue.Project.Description)
 				}
+				if issue.ProjectMilestone != nil {
+					fmt.Printf("- **Milestone**: %s\n", issue.ProjectMilestone.Name)
+				}
 			}
 
 			if issue.Cycle != nil {
@@ -598,6 +601,10 @@ var issueGetCmd = &cobra.Command{
 			fmt.Printf("Project: %s (%s)\n",
 				color.New(color.FgBlue).Sprint(issue.Project.Name),
 				color.New(color.FgWhite, color.Faint).Sprintf("%.0f%%", issue.Project.Progress*100))
+			if issue.ProjectMilestone != nil {
+				fmt.Printf("Milestone: %s\n",
+					color.New(color.FgBlue).Sprint(issue.ProjectMilestone.Name))
+			}
 		}
 
 		if issue.Cycle != nil {
@@ -890,6 +897,73 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		// Handle project flag
+		if cmd.Flags().Changed("project") {
+			projectName, _ := cmd.Flags().GetString("project")
+			if projectName != "" {
+				projects, err := client.GetProjects(context.Background(), nil, 100, "", "")
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get projects: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				var foundProject *api.Project
+				for _, project := range projects.Nodes {
+					if strings.EqualFold(project.Name, projectName) || project.ID == projectName {
+						p := project
+						foundProject = &p
+						break
+					}
+				}
+
+				if foundProject == nil {
+					var projectNames []string
+					for _, project := range projects.Nodes {
+						projectNames = append(projectNames, project.Name)
+					}
+					output.Error(fmt.Sprintf("Project '%s' not found. Available projects: %s", projectName, strings.Join(projectNames, ", ")), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				input["projectId"] = foundProject.ID
+
+				// Handle project milestone flag (only valid with project)
+				if cmd.Flags().Changed("project-milestone") {
+					milestoneName, _ := cmd.Flags().GetString("project-milestone")
+					if milestoneName != "" {
+						milestones, err := client.GetProjectMilestones(context.Background(), foundProject.ID)
+						if err != nil {
+							output.Error(fmt.Sprintf("Failed to get project milestones: %v", err), plaintext, jsonOut)
+							os.Exit(1)
+						}
+
+						var foundMilestone *api.ProjectMilestone
+						for _, milestone := range milestones {
+							if strings.EqualFold(milestone.Name, milestoneName) || milestone.ID == milestoneName {
+								m := milestone
+								foundMilestone = &m
+								break
+							}
+						}
+
+						if foundMilestone == nil {
+							var milestoneNames []string
+							for _, milestone := range milestones {
+								milestoneNames = append(milestoneNames, milestone.Name)
+							}
+							output.Error(fmt.Sprintf("Milestone '%s' not found. Available milestones: %s", milestoneName, strings.Join(milestoneNames, ", ")), plaintext, jsonOut)
+							os.Exit(1)
+						}
+
+						input["projectMilestoneId"] = foundMilestone.ID
+					}
+				}
+			}
+		} else if cmd.Flags().Changed("project-milestone") {
+			output.Error("--project-milestone requires --project to be specified", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -925,6 +999,8 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --project "Q1 Planning"
+  linctl issue update LIN-123 --project-milestone "Phase 1"
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1049,6 +1125,95 @@ Examples:
 			}
 		}
 
+		// Handle project update
+		if cmd.Flags().Changed("project") {
+			projectName, _ := cmd.Flags().GetString("project")
+			if projectName == "" {
+				input["projectId"] = nil
+			} else {
+				// Look up project by name or ID
+				projects, err := client.GetProjects(context.Background(), nil, 100, "", "")
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get projects: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				var foundProject *api.Project
+				for _, project := range projects.Nodes {
+					if strings.EqualFold(project.Name, projectName) || project.ID == projectName {
+						p := project
+						foundProject = &p
+						break
+					}
+				}
+
+				if foundProject == nil {
+					var projectNames []string
+					for _, project := range projects.Nodes {
+						projectNames = append(projectNames, project.Name)
+					}
+					output.Error(fmt.Sprintf("Project '%s' not found. Available projects: %s", projectName, strings.Join(projectNames, ", ")), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				input["projectId"] = foundProject.ID
+			}
+		}
+
+		// Handle project milestone update
+		if cmd.Flags().Changed("project-milestone") {
+			milestoneName, _ := cmd.Flags().GetString("project-milestone")
+			if milestoneName == "" {
+				input["projectMilestoneId"] = nil
+			} else {
+				// First, determine the project (either from --project flag or from the existing issue)
+				var projectID string
+
+				if pid, ok := input["projectId"]; ok && pid != nil {
+					projectID = pid.(string)
+				} else {
+					// Get the issue to find its current project
+					issue, err := client.GetIssue(context.Background(), args[0])
+					if err != nil {
+						output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
+						os.Exit(1)
+					}
+					if issue.Project == nil {
+						output.Error("Issue is not assigned to a project. Use --project to assign it to a project first.", plaintext, jsonOut)
+						os.Exit(1)
+					}
+					projectID = issue.Project.ID
+				}
+
+				// Look up milestones for the project
+				milestones, err := client.GetProjectMilestones(context.Background(), projectID)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get project milestones: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				var foundMilestone *api.ProjectMilestone
+				for _, milestone := range milestones {
+					if strings.EqualFold(milestone.Name, milestoneName) || milestone.ID == milestoneName {
+						m := milestone
+						foundMilestone = &m
+						break
+					}
+				}
+
+				if foundMilestone == nil {
+					var milestoneNames []string
+					for _, milestone := range milestones {
+						milestoneNames = append(milestoneNames, milestone.Name)
+					}
+					output.Error(fmt.Sprintf("Milestone '%s' not found. Available milestones: %s", milestoneName, strings.Join(milestoneNames, ", ")), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				input["projectMilestoneId"] = foundMilestone.ID
+			}
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1108,6 +1273,8 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("project", "", "Project name or ID to assign the issue to")
+	issueCreateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (requires --project)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1118,4 +1285,6 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("project", "", "Project name or ID (or empty to remove from project)")
+	issueUpdateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (or empty to remove)")
 }

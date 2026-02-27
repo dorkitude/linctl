@@ -55,8 +55,9 @@ type Issue struct {
 	URL                 string       `json:"url"`
 	BranchName          string       `json:"branchName"`
 	Cycle               *Cycle       `json:"cycle"`
-	Project             *Project     `json:"project"`
-	Attachments         *Attachments `json:"attachments"`
+	Project             *Project          `json:"project"`
+	ProjectMilestone    *ProjectMilestone `json:"projectMilestone"`
+	Attachments         *Attachments      `json:"attachments"`
 	Comments            *Comments    `json:"comments"`
 	SnoozedUntilAt      *time.Time   `json:"snoozedUntilAt"`
 	CompletedAt         *time.Time   `json:"completedAt"`
@@ -171,6 +172,17 @@ type Cycle struct {
 	Progress     float64    `json:"progress"`
 	CompletedAt  *time.Time `json:"completedAt"`
 	ScopeHistory []float64  `json:"scopeHistory"`
+}
+
+// ProjectMilestone represents a milestone within a Linear project
+type ProjectMilestone struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	TargetDate  *string    `json:"targetDate"`
+	SortOrder   float64    `json:"sortOrder"`
+	CreatedAt   *time.Time `json:"createdAt"`
+	UpdatedAt   *time.Time `json:"updatedAt"`
 }
 
 // Attachment represents a file attachment or link
@@ -680,6 +692,13 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 						email
 					}
 				}
+				projectMilestone {
+					id
+					name
+					description
+					targetDate
+					sortOrder
+				}
 				attachments(first: 20) {
 					nodes {
 						id
@@ -1119,6 +1138,16 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 							color
 						}
 					}
+					project {
+						id
+						name
+						state
+						progress
+					}
+					projectMilestone {
+						id
+						name
+					}
 				}
 			}
 		}
@@ -1180,6 +1209,16 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 							name
 							color
 						}
+					}
+					project {
+						id
+						name
+						state
+						progress
+					}
+					projectMilestone {
+						id
+						name
 					}
 				}
 			}
@@ -1512,4 +1551,42 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	}
 
 	return &response.CommentCreate.Comment, nil
+}
+
+// GetProjectMilestones returns milestones for a specific project
+func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
+	query := `
+		query ProjectMilestones($id: String!) {
+			project(id: $id) {
+				projectMilestones {
+					nodes {
+						id
+						name
+						description
+						targetDate
+						sortOrder
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": projectID,
+	}
+
+	var response struct {
+		Project struct {
+			ProjectMilestones struct {
+				Nodes []ProjectMilestone `json:"nodes"`
+			} `json:"projectMilestones"`
+		} `json:"project"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Project.ProjectMilestones.Nodes, nil
 }
