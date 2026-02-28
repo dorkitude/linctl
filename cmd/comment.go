@@ -19,11 +19,14 @@ import (
 var commentCmd = &cobra.Command{
 	Use:   "comment",
 	Short: "Manage issue comments",
-	Long: `Manage comments on Linear issues including listing and creating comments.
+	Long: `Manage comments on Linear issues with full CRUD support.
 
 Examples:
   linctl comment list LIN-123        # List comments for an issue
-  linctl comment create LIN-123 --body "This is fixed"  # Add a comment`,
+  linctl comment create LIN-123 --body "This is fixed"  # Add a comment
+  linctl comment get COMMENT-ID
+  linctl comment update COMMENT-ID --body "Updated content"
+  linctl comment delete COMMENT-ID`,
 }
 
 var commentListCmd = &cobra.Command{
@@ -83,6 +86,7 @@ var commentListCmd = &cobra.Command{
 				if i > 0 {
 					fmt.Println("---")
 				}
+				fmt.Printf("ID: %s\n", comment.ID)
 				fmt.Printf("Author: %s\n", commentAuthorName(&comment))
 				fmt.Printf("Date: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
 				fmt.Printf("Comment:\n%s\n", comment.Body)
@@ -108,10 +112,12 @@ var commentListCmd = &cobra.Command{
 
 				// Header with author and time
 				timeAgo := formatTimeAgo(comment.CreatedAt)
-				fmt.Printf("%s %s %s\n",
+				fmt.Printf("%s %s %s %s %s\n",
 					color.New(color.FgCyan, color.Bold).Sprint(commentAuthorName(&comment)),
 					color.New(color.FgWhite, color.Faint).Sprint("•"),
-					color.New(color.FgWhite, color.Faint).Sprint(timeAgo))
+					color.New(color.FgWhite, color.Faint).Sprint(timeAgo),
+					color.New(color.FgWhite, color.Faint).Sprint("•"),
+					color.New(color.FgWhite, color.Faint).Sprintf("id=%s", comment.ID))
 
 				// Comment body
 				fmt.Printf("\n%s\n\n", comment.Body)
@@ -171,6 +177,134 @@ var commentCreateCmd = &cobra.Command{
 	},
 }
 
+var commentGetCmd = &cobra.Command{
+	Use:     "get COMMENT-ID",
+	Aliases: []string{"show"},
+	Short:   "Get a comment by ID",
+	Long:    `Get details for a specific comment.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+		comment, err := client.GetComment(context.Background(), commentID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to get comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(comment)
+		} else if plaintext {
+			fmt.Printf("ID: %s\n", comment.ID)
+			fmt.Printf("Author: %s\n", commentAuthorName(comment))
+			fmt.Printf("Created: %s\n", comment.CreatedAt.Format("2006-01-02 15:04:05"))
+			fmt.Printf("Updated: %s\n", comment.UpdatedAt.Format("2006-01-02 15:04:05"))
+			if comment.EditedAt != nil {
+				fmt.Printf("Edited: %s\n", comment.EditedAt.Format("2006-01-02 15:04:05"))
+			}
+			fmt.Printf("Comment:\n%s\n", comment.Body)
+		} else {
+			fmt.Printf("%s %s\n",
+				color.New(color.FgCyan, color.Bold).Sprint("Comment"),
+				color.New(color.FgWhite, color.Faint).Sprintf("(%s)", comment.ID))
+			fmt.Printf("%s %s\n",
+				color.New(color.FgCyan).Sprint(commentAuthorName(comment)),
+				color.New(color.FgWhite, color.Faint).Sprint(formatTimeAgo(comment.CreatedAt)))
+			fmt.Printf("\n%s\n", comment.Body)
+		}
+	},
+}
+
+var commentUpdateCmd = &cobra.Command{
+	Use:     "update COMMENT-ID",
+	Aliases: []string{"edit"},
+	Short:   "Update a comment by ID",
+	Long:    `Update comment body for an existing comment.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		body, _ := cmd.Flags().GetString("body")
+		if body == "" {
+			output.Error("Comment body is required (--body)", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+		comment, err := client.UpdateComment(context.Background(), commentID, body)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to update comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(comment)
+		} else if plaintext {
+			fmt.Printf("Updated comment %s\n", comment.ID)
+		} else {
+			fmt.Printf("%s Updated comment %s\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan, color.Bold).Sprint(comment.ID))
+		}
+	},
+}
+
+var commentDeleteCmd = &cobra.Command{
+	Use:     "delete COMMENT-ID",
+	Aliases: []string{"remove", "rm"},
+	Short:   "Delete a comment by ID",
+	Long:    `Delete an existing comment.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		commentID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+		err = client.DeleteComment(context.Background(), commentID)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to delete comment: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(map[string]interface{}{
+				"deleted":   true,
+				"commentId": commentID,
+			})
+		} else if plaintext {
+			fmt.Printf("Deleted comment %s\n", commentID)
+		} else {
+			fmt.Printf("%s Deleted comment %s\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan, color.Bold).Sprint(commentID))
+		}
+	},
+}
+
 // formatTimeAgo formats a time as a human-readable "time ago" string
 func formatTimeAgo(t time.Time) string {
 	duration := time.Since(t)
@@ -214,6 +348,9 @@ func init() {
 	rootCmd.AddCommand(commentCmd)
 	commentCmd.AddCommand(commentListCmd)
 	commentCmd.AddCommand(commentCreateCmd)
+	commentCmd.AddCommand(commentGetCmd)
+	commentCmd.AddCommand(commentUpdateCmd)
+	commentCmd.AddCommand(commentDeleteCmd)
 
 	// List command flags
 	commentListCmd.Flags().IntP("limit", "l", 50, "Maximum number of comments to return")
@@ -222,4 +359,8 @@ func init() {
 	// Create command flags
 	commentCreateCmd.Flags().StringP("body", "b", "", "Comment body (required)")
 	_ = commentCreateCmd.MarkFlagRequired("body")
+
+	// Update command flags
+	commentUpdateCmd.Flags().StringP("body", "b", "", "Updated comment body (required)")
+	_ = commentUpdateCmd.MarkFlagRequired("body")
 }

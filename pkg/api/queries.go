@@ -1811,6 +1811,125 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 	return &response.CommentCreate.Comment, nil
 }
 
+// GetComment returns a single comment by ID.
+func (c *Client) GetComment(ctx context.Context, id string) (*Comment, error) {
+	query := `
+		query Comment($id: String!) {
+			comment(id: $id) {
+				id
+				body
+				createdAt
+				updatedAt
+				editedAt
+				user {
+					id
+					name
+					email
+				}
+				parent {
+					id
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		Comment Comment `json:"comment"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Comment, nil
+}
+
+// UpdateComment updates an existing comment by ID.
+func (c *Client) UpdateComment(ctx context.Context, id string, body string) (*Comment, error) {
+	query := `
+		mutation UpdateComment($id: String!, $input: CommentUpdateInput!) {
+			commentUpdate(id: $id, input: $input) {
+				success
+				comment {
+					id
+					body
+					createdAt
+					updatedAt
+					editedAt
+					user {
+						id
+						name
+						email
+					}
+					parent {
+						id
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+		"input": map[string]interface{}{
+			"body": body,
+		},
+	}
+
+	var response struct {
+		CommentUpdate struct {
+			Success bool    `json:"success"`
+			Comment Comment `json:"comment"`
+		} `json:"commentUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+	if !response.CommentUpdate.Success {
+		return nil, fmt.Errorf("failed to update comment")
+	}
+
+	return &response.CommentUpdate.Comment, nil
+}
+
+// DeleteComment deletes a comment by ID.
+func (c *Client) DeleteComment(ctx context.Context, id string) error {
+	query := `
+		mutation DeleteComment($id: String!) {
+			commentDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		CommentDelete struct {
+			Success bool `json:"success"`
+		} `json:"commentDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+	if !response.CommentDelete.Success {
+		return fmt.Errorf("failed to delete comment")
+	}
+
+	return nil
+}
+
 // CreateAttachment creates a new attachment on an issue.
 func (c *Client) CreateAttachment(ctx context.Context, input map[string]interface{}) (*Attachment, error) {
 	query := `
