@@ -508,7 +508,7 @@ var issueGetCmd = &cobra.Command{
 					fmt.Printf("%s\n", comment.Body)
 					if comment.Children != nil && len(comment.Children.Nodes) > 0 {
 						for _, reply := range comment.Children.Nodes {
-							fmt.Printf("\n  **Reply from %s**: %s\n", reply.User.Name, reply.Body)
+							fmt.Printf("\n  **Reply from %s**: %s\n", commentAuthorName(&reply), reply.Body)
 						}
 					}
 				}
@@ -519,7 +519,11 @@ var issueGetCmd = &cobra.Command{
 			if issue.History != nil && len(issue.History.Nodes) > 0 {
 				fmt.Printf("\n## Recent History\n")
 				for _, entry := range issue.History.Nodes {
-					fmt.Printf("\n- **%s** by %s", entry.CreatedAt.Format("2006-01-02 15:04"), entry.Actor.Name)
+					actorName := "System"
+					if entry.Actor != nil && strings.TrimSpace(entry.Actor.Name) != "" {
+						actorName = entry.Actor.Name
+					}
+					fmt.Printf("\n- **%s** by %s", entry.CreatedAt.Format("2006-01-02 15:04"), actorName)
 					changes := []string{}
 
 					if entry.FromState != nil && entry.ToState != nil {
