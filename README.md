@@ -11,6 +11,7 @@ A comprehensive command-line interface for Linear's API, built with Go and Cobra
   - Git branch integration showing linked branches
   - Cycle (sprint) and project associations
   - Label assignment on create/update (`--labels`, `--clear-labels`)
+  - Delegation support on create/update (`--delegate`)
   - Project + project milestone assignment on create/update
   - Attachments and recent comments preview
   - Due dates, snoozed status, and completion tracking
@@ -19,6 +20,7 @@ A comprehensive command-line interface for Linear's API, built with Go and Cobra
 - 🚀 **Project Management**: List, view, create, update, archive, and permanently delete projects
 - 👤 **User Management**: List all users, view user details, and current user info
 - 🏷️ **Label Management**: List, get, create, update, and delete issue labels
+- 🤖 **Agent Support**: View issue agent sessions and mention delegated agents
 - 💬 **Comments**: Full CRUD support for issue comments with time-aware formatting
 - 📎 **Attachments**: View file uploads and attachments on issues
   - Create URL/GitHub PR attachments with `linctl issue attach`
@@ -132,6 +134,7 @@ linctl issue create --title "Bug fix" --team ENG
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform"
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
 linctl issue create --title "Bug fix" --team ENG --labels bug,urgent
+linctl issue create --title "Bug fix" --team ENG --delegate agent-runner
 
 # Assign issue to yourself
 linctl issue assign LIN-123
@@ -152,6 +155,8 @@ linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1
 linctl issue update LIN-123 --project-milestone "none"  # Remove project milestone
 linctl issue update LIN-123 --labels bug,urgent
 linctl issue update LIN-123 --clear-labels
+linctl issue update LIN-123 --delegate agent-runner
+linctl issue update LIN-123 --delegate none  # Remove delegate
 linctl issue update LIN-123 --parent LIN-100
 linctl issue update LIN-123 --parent none  # Remove parent
 
@@ -258,6 +263,18 @@ linctl label update LABEL-ID --name "critical bug"
 linctl label delete LABEL-ID
 ```
 
+### 8. Agent Sessions
+```bash
+# View delegated/agent session state for an issue
+linctl agent ENG-80
+
+# Mention the delegated/active agent with a message
+linctl agent mention ENG-80 "Please investigate this failure"
+
+# Override target handle explicitly
+linctl agent mention ENG-80 --agent agent-runner "Please rerun tests"
+```
+
 ## 📖 Command Reference
 
 ### Global Flags
@@ -305,6 +322,7 @@ linctl issue new [flags]      # Alias
   -t, --team string        Team key (required)
   --priority int       Priority 0-4 (default 3)
   -m, --assign-me          Assign to yourself
+  --delegate string        Delegate to user/agent (email, name, or displayName)
   --labels strings         Labels to assign (names or IDs, comma-separated)
   --project string         Project name or ID to assign the issue to
   --project-milestone string  Project milestone name or ID (requires --project)
@@ -322,6 +340,7 @@ linctl issue edit <issue-id> [flags]    # Alias
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
+  --delegate string        Delegate to user/agent (email, name, displayName, or 'none' to remove)
   --labels strings         Replace labels with provided names or IDs (comma-separated)
   --clear-labels           Remove all labels from the issue
   --parent string          Parent issue ID/identifier (or 'none' to remove parent)
@@ -337,6 +356,17 @@ linctl issue attach <issue-id> [flags]
   --subtitle string        Attachment subtitle
   --icon-url string        Attachment icon URL
 
+```
+
+### Agent Commands
+```bash
+# View agent delegation/session for an issue
+linctl agent <issue-id>
+
+# Mention delegated/active agent
+linctl agent mention <issue-id> <message...>
+# Optional flag:
+  --agent string           Agent handle override (defaults to delegated/active agent)
 ```
 
 ### Team Commands

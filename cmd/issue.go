@@ -992,6 +992,7 @@ Examples:
   linctl issue create --title "Fix bug" --team ENG
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform"
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
+  linctl issue create --title "Fix bug" --team ENG --delegate agent-user
   linctl issue create --title "Fix bug" --team ENG --labels bug,urgent`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
@@ -1014,6 +1015,7 @@ Examples:
 		projectValue, _ := cmd.Flags().GetString("project")
 		projectMilestoneValue, _ := cmd.Flags().GetString("project-milestone")
 		labelValues, _ := cmd.Flags().GetStringSlice("labels")
+		delegateIdentifier, _ := cmd.Flags().GetString("delegate")
 
 		if title == "" {
 			output.Error("Title is required (--title)", plaintext, jsonOut)
@@ -1053,6 +1055,15 @@ Examples:
 				os.Exit(1)
 			}
 			input["assigneeId"] = viewer.ID
+		}
+
+		if cmd.Flags().Changed("delegate") && !isUnsetValue(delegateIdentifier) {
+			delegateUser, err := client.FindUserByIdentifier(context.Background(), delegateIdentifier)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to resolve delegate: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["delegateId"] = delegateUser.ID
 		}
 
 		if cmd.Flags().Changed("project") && !isUnsetValue(projectValue) {
@@ -1161,6 +1172,8 @@ Examples:
   linctl issue update LIN-123 --due-date "2024-12-31"
   linctl issue update LIN-123 --project "Q1 Platform"
   linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1"
+  linctl issue update LIN-123 --delegate agent-user
+  linctl issue update LIN-123 --delegate none
   linctl issue update LIN-123 --labels bug,urgent
   linctl issue update LIN-123 --clear-labels
   linctl issue update LIN-123 --parent LIN-100
@@ -1296,6 +1309,21 @@ Examples:
 				input["dueDate"] = nil
 			} else {
 				input["dueDate"] = dueDate
+			}
+		}
+
+		// Handle delegate update
+		if cmd.Flags().Changed("delegate") {
+			delegateIdentifier, _ := cmd.Flags().GetString("delegate")
+			if isUnsetValue(delegateIdentifier) {
+				input["delegateId"] = nil
+			} else {
+				delegateUser, err := client.FindUserByIdentifier(context.Background(), delegateIdentifier)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to resolve delegate: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				input["delegateId"] = delegateUser.ID
 			}
 		}
 
@@ -1782,6 +1810,7 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("delegate", "", "Delegate to user/agent (email, name, or displayName)")
 	issueCreateCmd.Flags().String("project", "", "Project name or ID to assign the issue to")
 	issueCreateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (requires --project)")
 	issueCreateCmd.Flags().StringSlice("labels", []string{}, "Labels to assign (names or IDs, comma-separated)")
@@ -1795,6 +1824,7 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("delegate", "", "Delegate to user/agent (email, name, displayName, or 'none' to remove)")
 	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID/identifier (or 'none' to remove parent)")
 	issueUpdateCmd.Flags().String("project", "", "Project name or ID (or 'none' to remove project assignment)")
 	issueUpdateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (or 'none' to remove milestone)")

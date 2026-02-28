@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -81,6 +82,7 @@ type Issue struct {
 	SlackIssueComments    []SlackComment   `json:"slackIssueComments"`
 	ExternalUserCreator   *ExternalUser    `json:"externalUserCreator"`
 	CustomerTickets       []CustomerTicket `json:"customerTickets"`
+	Delegate              *User            `json:"delegate"`
 }
 
 // State represents an issue state
@@ -380,6 +382,30 @@ type ProjectLink struct {
 	Creator   *User     `json:"creator"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// AgentSession represents an agent execution session associated with a comment.
+type AgentSession struct {
+	ID         string           `json:"id"`
+	Status     string           `json:"status"`
+	CreatedAt  time.Time        `json:"createdAt"`
+	UpdatedAt  time.Time        `json:"updatedAt"`
+	AppUser    *User            `json:"appUser"`
+	Activities *AgentActivities `json:"activities"`
+}
+
+// AgentActivities represents a paginated activity list for an agent session.
+type AgentActivities struct {
+	Nodes    []AgentActivity `json:"nodes"`
+	PageInfo PageInfo        `json:"pageInfo"`
+}
+
+// AgentActivity represents one activity event.
+type AgentActivity struct {
+	ID        string                 `json:"id"`
+	CreatedAt time.Time              `json:"createdAt"`
+	Ephemeral bool                   `json:"ephemeral"`
+	Content   map[string]interface{} `json:"content"`
 }
 
 // GetViewer returns the current authenticated user
@@ -836,6 +862,84 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 
 	variables := map[string]interface{}{
 		"id": id,
+	}
+
+	var response struct {
+		Issue Issue `json:"issue"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Issue, nil
+}
+
+// GetIssueAgentSession returns issue delegate and agent sessions in recent comments.
+func (c *Client) GetIssueAgentSession(ctx context.Context, issueID string) (*Issue, error) {
+	query := `
+		query IssueAgentSession($id: String!) {
+			issue(id: $id) {
+				id
+				identifier
+				title
+				delegate {
+					id
+					name
+					displayName
+					email
+				}
+				comments(first: 50) {
+					nodes {
+						id
+						body
+						createdAt
+						user {
+							id
+							name
+							displayName
+							email
+						}
+						agentSession {
+							id
+							status
+							createdAt
+							updatedAt
+							appUser {
+								id
+								name
+								displayName
+								email
+							}
+							activities(first: 50) {
+								nodes {
+									id
+									createdAt
+									ephemeral
+									content {
+										... on AgentActivityThoughtContent { type body }
+										... on AgentActivityResponseContent { type body }
+										... on AgentActivityActionContent { type action parameter }
+										... on AgentActivityErrorContent { type body }
+										... on AgentActivityElicitationContent { type body }
+										... on AgentActivityPromptContent { type body }
+									}
+								}
+								pageInfo {
+									hasNextPage
+									endCursor
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": issueID,
 	}
 
 	var response struct {
@@ -1765,14 +1869,15 @@ func (c *Client) DeleteLabel(ctx context.Context, id string) error {
 
 // Comment represents a Linear comment
 type Comment struct {
-	ID        string     `json:"id"`
-	Body      string     `json:"body"`
-	CreatedAt time.Time  `json:"createdAt"`
-	UpdatedAt time.Time  `json:"updatedAt"`
-	EditedAt  *time.Time `json:"editedAt"`
-	User      *User      `json:"user"`
-	Parent    *Comment   `json:"parent"`
-	Children  *Comments  `json:"children"`
+	ID           string        `json:"id"`
+	Body         string        `json:"body"`
+	CreatedAt    time.Time     `json:"createdAt"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
+	EditedAt     *time.Time    `json:"editedAt"`
+	User         *User         `json:"user"`
+	Parent       *Comment      `json:"parent"`
+	Children     *Comments     `json:"children"`
+	AgentSession *AgentSession `json:"agentSession"`
 }
 
 // Comments represents a paginated list of comments
@@ -1946,6 +2051,36 @@ func (c *Client) GetUser(ctx context.Context, email string) (*User, error) {
 	}
 
 	return &response.User, nil
+}
+
+// FindUserByIdentifier finds a user by email, name, or displayName (case-insensitive).
+func (c *Client) FindUserByIdentifier(ctx context.Context, identifier string) (*User, error) {
+	normalized := strings.ToLower(strings.TrimSpace(identifier))
+	if normalized == "" {
+		return nil, fmt.Errorf("user identifier cannot be empty")
+	}
+
+	after := ""
+	for {
+		users, err := c.GetUsers(ctx, 100, after, "")
+		if err != nil {
+			return nil, err
+		}
+
+		for i := range users.Nodes {
+			user := users.Nodes[i]
+			if strings.EqualFold(user.Email, normalized) || strings.EqualFold(user.Name, normalized) || strings.EqualFold(user.DisplayName, normalized) {
+				return &user, nil
+			}
+		}
+
+		if !users.PageInfo.HasNextPage {
+			break
+		}
+		after = users.PageInfo.EndCursor
+	}
+
+	return nil, fmt.Errorf("user not found: %s", identifier)
 }
 
 // GetIssueComments returns comments for a specific issue
@@ -2159,6 +2294,25 @@ func (c *Client) DeleteComment(ctx context.Context, id string) error {
 	}
 
 	return nil
+}
+
+// MentionAgent creates a comment that @mentions an agent handle.
+func (c *Client) MentionAgent(ctx context.Context, issueID string, agentHandle string, message string) (string, error) {
+	handle := strings.TrimSpace(agentHandle)
+	body := strings.TrimSpace(message)
+	if handle == "" {
+		return "", fmt.Errorf("agent handle cannot be empty")
+	}
+	if body == "" {
+		return "", fmt.Errorf("message cannot be empty")
+	}
+
+	commentBody := fmt.Sprintf("@%s\n\n%s", handle, body)
+	comment, err := c.CreateComment(ctx, issueID, commentBody)
+	if err != nil {
+		return "", err
+	}
+	return comment.ID, nil
 }
 
 // CreateAttachment creates a new attachment on an issue.
