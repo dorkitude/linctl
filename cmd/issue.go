@@ -925,6 +925,8 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
+  linctl issue update LIN-123 --parent LIN-100     # Make sub-issue of LIN-100
+  linctl issue update LIN-123 --parent none        # Remove parent (promote to top-level)
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1049,6 +1051,34 @@ Examples:
 			}
 		}
 
+		// Handle parent update
+		if cmd.Flags().Changed("parent") {
+			parentValue, _ := cmd.Flags().GetString("parent")
+			normalizedValue := strings.ToLower(strings.TrimSpace(parentValue))
+
+			switch normalizedValue {
+			case "none", "null", "":
+				// Remove parent relationship (promote to top-level issue)
+				input["parentId"] = nil
+			default:
+				// Validate that the parent issue exists
+				parentIssue, err := client.GetIssue(context.Background(), parentValue)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to find parent issue '%s': %v", parentValue, err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				// Prevent self-referencing
+				currentIssueID := args[0]
+				if parentIssue.Identifier == currentIssueID || parentIssue.ID == currentIssueID {
+					output.Error("An issue cannot be its own parent", plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				input["parentId"] = parentIssue.ID
+			}
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1066,8 +1096,17 @@ Examples:
 			output.JSON(issue)
 		} else if plaintext {
 			fmt.Printf("Updated issue %s\n", issue.Identifier)
+			if issue.Parent != nil {
+				fmt.Printf("Parent: %s - %s\n", issue.Parent.Identifier, issue.Parent.Title)
+			}
 		} else {
 			output.Success(fmt.Sprintf("Updated issue %s", issue.Identifier), plaintext, jsonOut)
+			if issue.Parent != nil {
+				fmt.Printf("  %s Parent: %s - %s\n",
+					color.New(color.FgBlue).Sprint("↳"),
+					color.New(color.FgCyan).Sprint(issue.Parent.Identifier),
+					issue.Parent.Title)
+			}
 		}
 	},
 }
@@ -1118,4 +1157,5 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
+	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none' to remove parent)")
 }

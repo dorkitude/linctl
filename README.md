@@ -141,9 +141,12 @@ linctl issue update LIN-123 --state "In Progress"
 linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
+linctl issue update LIN-123 --parent LIN-456  # Set parent issue
+linctl issue update LIN-123 --parent none  # Remove parent
 
 # Update multiple fields at once
 linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1
+linctl issue update LIN-123 --parent LIN-456 --title "Sub-task" --assignee me
 ```
 
 ### 3. Project Management
@@ -260,6 +263,7 @@ linctl issue edit <issue-id> [flags]    # Alias
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
+  --parent string          Parent issue ID/identifier (or 'none' to remove parent)
 
 # Archive issue (coming soon)
 linctl issue archive <issue-id>
@@ -619,6 +623,13 @@ linctl team members ENG --json | jq '. | length'
 
 # Export issue comments
 linctl comment list LIN-123 --json > issue-comments.json
+
+# Set up parent-child issue relationships
+linctl issue update LIN-124 --parent LIN-123  # Make LIN-124 a sub-issue of LIN-123
+linctl issue update LIN-125 --parent LIN-123  # Make LIN-125 also a sub-issue
+
+# Remove parent-child relationships
+linctl issue update LIN-124 --parent none
 ```
 
 ## 📡 Real-World Examples
