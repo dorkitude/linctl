@@ -1,37 +1,26 @@
-# 🚀 linctl - Linear CLI Tool
+# linctl
 
 
-A comprehensive command-line interface for Linear's API, built with Go and Cobra.
+A command-line interface for the Linear API, built with Go and Cobra.
 
-## ✨ Features
+## Features
 
-- 🔐 **Authentication**: Personal API Key support
-- 📋 **Issue Management**: Create, list, view, update, assign, and manage issues with full details
-  - Sub-issue hierarchy with parent/child relationships
-  - Git branch integration showing linked branches
-  - Cycle (sprint) and project associations
-  - Label assignment on create/update (`--labels`, `--clear-labels`)
-  - Delegation support on create/update (`--delegate`)
-  - Project + project milestone assignment on create/update
-  - Attachments and recent comments preview
-  - Due dates, snoozed status, and completion tracking
-  - Full-text search via `linctl issue search`
-- 👥 **Team Management**: View teams, get team details, and list team members
-- 🚀 **Project Management**: List, view, create, update, archive, and permanently delete projects
-- 👤 **User Management**: List all users, view user details, and current user info
-- 🏷️ **Label Management**: List, get, create, update, and delete issue labels
-- 🤖 **Agent Support**: View issue agent sessions and mention delegated agents
-- 💬 **Comments**: Full CRUD support for issue comments with time-aware formatting
-- 📎 **Attachments**: View file uploads and attachments on issues
-  - Create URL/GitHub PR attachments with `linctl issue attach`
-- 🎨 **Multiple Output Formats**: Table, plaintext, and JSON output
-- ⚡ **Performance**: Fast and lightweight CLI tool
-- 🔄 **Flexible Sorting**: Sort lists by Linear's default order, creation date, or update date
-- 📅 **Time-based Filtering**: Filter lists by creation date with intuitive time expressions
-- 📚 **Built-in Documentation**: Access full documentation with `linctl docs`
-- 🧪 **Smoke Testing**: Automated smoke tests for all read-only commands
+- **Authentication**: personal API key auth (`linctl auth`) and env-var override support.
+- **Issues**: list/search/get/create/update/assign with support for:
+  - cycles, labels, delegation, projects/milestones, parent/sub-issue links
+  - due dates, attachments, comments, and rich issue detail output
+- **Projects**: list/get/create/update/delete/archive.
+- **Teams**: list/get/members.
+- **Users**: list/get/me.
+- **Labels**: list/get/create/update/delete.
+- **Comments**: list/get/create/update/delete.
+- **Agent Sessions**: inspect issue agent session state and mention delegated/active agents.
+- **Output modes**: table, plaintext, and JSON.
+- **Sorting and time filters**: reusable list/search filtering patterns.
+- **Built-in docs**: `linctl docs`.
+- **Read-only smoke testing** support.
 
-## 🛠️ Installation
+## Installation
 
 ### Homebrew (macOS/Linux)
 ```bash
@@ -76,7 +65,7 @@ This improves performance and prevents overwhelming data loads. To see older ite
 - Need archived matches? Add `--include-archived` when using `issue search`.
 
 
-## 🚀 Quick Start
+## Quick Start
 
 > **IMPORTANT**  Agents like Claude Code, Cursor, and Gemini should use the `--json` flag on all read operations.
 
@@ -275,7 +264,7 @@ linctl agent mention ENG-80 "Please investigate this failure"
 linctl agent mention ENG-80 --agent agent-runner "Please rerun tests"
 ```
 
-## 📖 Command Reference
+## Command Reference
 
 ### Global Flags
 - `--plaintext, -p`: Plain text output (non-interactive)
@@ -531,7 +520,7 @@ linctl label rm <label-id>             # Alias
 linctl label remove <label-id>         # Alias
 ```
 
-## 🎨 Output Formats
+## Output Formats
 
 ### Table Format (Default)
 ```bash
@@ -590,7 +579,7 @@ linctl issue list --json
 ]
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 Configuration is stored in `~/.linctl.yaml`:
 
@@ -609,7 +598,7 @@ api:
 
 Authentication credentials are stored securely in `~/.linctl-auth.json`.
 
-## 🔒 Authentication
+## Authentication
 
 ### Personal API Key (Recommended)
 1. Go to [Linear Settings > API](https://linear.app/settings/api)
@@ -637,7 +626,7 @@ unset LINCTL_API_KEY
 
 Precedence: `LINCTL_API_KEY` environment variable > config file (`~/.linctl-auth.json`).
 
-## 📅 Time-based Filtering
+## Time-based Filtering
 
 **⚠️ Default Behavior**: To improve performance and prevent overwhelming data loads, list commands **only show items created in the last 6 months by default**. This is especially important for large workspaces.
 
@@ -706,7 +695,7 @@ linctl issue list --newer-than 1_day_ago
 linctl issue list --newer-than 2_weeks_ago --assignee me --sort updated
 ```
 
-## 🔄 Sorting Options
+## Sorting Options
 
 All list commands support sorting with the `--sort` or `-o` flag:
 
@@ -744,7 +733,7 @@ linctl project list --newer-than all_time --sort created
 - Use specific time ranges when possible instead of `all_time`
 - Combine time filtering with other filters (assignee, state, team) for faster results
 
-## 🧪 Testing
+## Testing
 
 Current test paths:
 
@@ -758,7 +747,7 @@ make test
 ./smoke_test.sh
 ```
 
-## 🤖 Scripting & Automation
+## Scripting & Automation
 
 Use `--plaintext` or `--json` flags for scripting:
 
@@ -795,7 +784,7 @@ linctl team members ENG --json | jq '. | length'
 linctl comment list LIN-123 --json > issue-comments.json
 ```
 
-## 📡 Real-World Examples
+## Real-World Examples
 
 ### Team Workflows
 ```bash
@@ -865,7 +854,7 @@ for issue in $(linctl issue list --assignee me --json | jq -r '.[].identifier');
 done
 ```
 
-## 🐛 Troubleshooting
+## Troubleshooting
 
 ### Authentication Issues
 ```bash
@@ -894,7 +883,7 @@ Linear has the following rate limits:
 - **Performance issues?** Avoid using `all_time` on large workspaces
   - Solution: Use specific time ranges like `--newer-than 1_year_ago`
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch
@@ -904,11 +893,11 @@ Linear has the following rate limits:
 
 See CONTRIBUTING.md for a detailed release checklist and the Homebrew tap auto-bump workflow.
 
-## 📄 License
+## License
 
 MIT License - see [LICENSE](LICENSE) file for details.
 
-## 🔗 Links
+## Links
 
 - [Linear API Documentation](https://developers.linear.app/)
 - [GitHub Repository](https://github.com/dorkitude/linctl)
