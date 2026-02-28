@@ -33,6 +33,20 @@ func constructProjectURL(projectID string, originalURL string) string {
 	return originalURL
 }
 
+func projectHasTeamKey(project api.Project, teamKey string) bool {
+	if project.Teams == nil {
+		return false
+	}
+
+	for _, team := range project.Teams.Nodes {
+		if strings.EqualFold(team.Key, teamKey) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // projectCmd represents the project command
 var projectCmd = &cobra.Command{
 	Use:   "project",
@@ -75,13 +89,14 @@ var projectListCmd = &cobra.Command{
 		// Build filter
 		filter := make(map[string]interface{})
 		if teamKey != "" {
-			// Get team ID from key
+			// Validate that the team key exists. Team filtering is applied client-side
+			// because Linear's ProjectFilter does not support a team field.
 			team, err := client.GetTeam(context.Background(), teamKey)
 			if err != nil {
 				output.Error(fmt.Sprintf("Failed to find team '%s': %v", teamKey, err), plaintext, jsonOut)
 				os.Exit(1)
 			}
-			filter["team"] = map[string]interface{}{"id": team.ID}
+			teamKey = team.Key
 		}
 		if state != "" {
 			filter["state"] = map[string]interface{}{"eq": state}
@@ -121,12 +136,48 @@ var projectListCmd = &cobra.Command{
 			}
 		}
 
-		// Get projects
-		projects, err := client.GetProjects(context.Background(), filter, limit, "", orderBy)
-		if err != nil {
-			output.Error(fmt.Sprintf("Failed to list projects: %v", err), plaintext, jsonOut)
-			os.Exit(1)
+		// Get projects.
+		// Team filtering is applied client-side due to ProjectFilter limitations.
+		projects := &api.Projects{
+			Nodes:    []api.Project{},
+			PageInfo: api.PageInfo{},
 		}
+		if teamKey == "" {
+			projects, err = client.GetProjects(context.Background(), filter, limit, "", orderBy)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to list projects: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+		} else {
+			after := ""
+			pageSize := 100
+
+			for {
+				page, err := client.GetProjects(context.Background(), filter, pageSize, after, orderBy)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to list projects: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				for _, project := range page.Nodes {
+					if projectHasTeamKey(project, teamKey) {
+						projects.Nodes = append(projects.Nodes, project)
+						if limit > 0 && len(projects.Nodes) >= limit {
+							projects.PageInfo.HasNextPage = page.PageInfo.HasNextPage
+							projects.PageInfo.EndCursor = page.PageInfo.EndCursor
+							goto doneFiltering
+						}
+					}
+				}
+
+				if !page.PageInfo.HasNextPage {
+					break
+				}
+				after = page.PageInfo.EndCursor
+			}
+		}
+
+	doneFiltering:
 
 		// Handle output
 		if jsonOut {

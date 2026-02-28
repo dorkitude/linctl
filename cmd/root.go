@@ -68,7 +68,7 @@ func generateHeader() string {
 var rootCmd = &cobra.Command{
 	Use:     "linctl",
 	Short:   "A comprehensive Linear CLI tool",
-	Long:    color.New(color.FgCyan).Sprintf("%s\nA comprehensive CLI tool for Linear's API featuring:\n• Issue management (create, list, update, archive)\n• Project tracking and collaboration  \n• Team and user management\n• Comments and attachments\n• Webhook configuration\n• Table/plaintext/JSON output formats\n", generateHeader()),
+	Long:    color.New(color.FgCyan).Sprintf("%s\nA comprehensive CLI tool for Linear's API featuring:\n• Issue management (create, list, search, get, assign, update)\n• Project management (list, get, create, update, delete/archive)\n• Team and user management\n• Comments and attachment visibility in issue details\n• Table/plaintext/JSON output formats\n", generateHeader()),
 	Version: version,
 }
 

@@ -379,6 +379,9 @@ var issueGetCmd = &cobra.Command{
 				if issue.Project.Description != "" {
 					fmt.Printf("- **Description**: %s\n", issue.Project.Description)
 				}
+				if issue.ProjectMilestone != nil {
+					fmt.Printf("- **Milestone**: %s\n", issue.ProjectMilestone.Name)
+				}
 			}
 
 			if issue.Cycle != nil {
@@ -598,6 +601,10 @@ var issueGetCmd = &cobra.Command{
 			fmt.Printf("Project: %s (%s)\n",
 				color.New(color.FgBlue).Sprint(issue.Project.Name),
 				color.New(color.FgWhite, color.Faint).Sprintf("%.0f%%", issue.Project.Progress*100))
+			if issue.ProjectMilestone != nil {
+				fmt.Printf("Milestone: %s\n",
+					color.New(color.FgBlue).Sprint(issue.ProjectMilestone.Name))
+			}
 		}
 
 		if issue.Cycle != nil {
@@ -826,11 +833,111 @@ var issueAssignCmd = &cobra.Command{
 	},
 }
 
+func isUnsetValue(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", "none", "null", "unassigned":
+		return true
+	default:
+		return false
+	}
+}
+
+func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return nil
+	}
+
+	for i := range projects {
+		if projects[i].ID == normalized || strings.EqualFold(projects[i].Name, normalized) {
+			return &projects[i]
+		}
+	}
+
+	return nil
+}
+
+func findMilestoneByNameOrID(milestones []api.ProjectMilestone, value string) *api.ProjectMilestone {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return nil
+	}
+
+	for i := range milestones {
+		if milestones[i].ID == normalized || strings.EqualFold(milestones[i].Name, normalized) {
+			return &milestones[i]
+		}
+	}
+
+	return nil
+}
+
+func listAllProjects(ctx context.Context, client *api.Client) ([]api.Project, error) {
+	projects := make([]api.Project, 0)
+	after := ""
+
+	for {
+		page, err := client.GetProjects(ctx, nil, 100, after, "")
+		if err != nil {
+			return nil, err
+		}
+
+		projects = append(projects, page.Nodes...)
+		if !page.PageInfo.HasNextPage {
+			break
+		}
+		after = page.PageInfo.EndCursor
+	}
+
+	return projects, nil
+}
+
+func resolveProjectID(ctx context.Context, client *api.Client, projectValue string) (string, error) {
+	projects, err := listAllProjects(ctx, client)
+	if err != nil {
+		return "", err
+	}
+
+	project := findProjectByNameOrID(projects, projectValue)
+	if project == nil {
+		projectNames := make([]string, 0, len(projects))
+		for _, p := range projects {
+			projectNames = append(projectNames, p.Name)
+		}
+		return "", fmt.Errorf("project %q not found. Available projects: %s", projectValue, strings.Join(projectNames, ", "))
+	}
+
+	return project.ID, nil
+}
+
+func resolveMilestoneID(ctx context.Context, client *api.Client, projectID string, milestoneValue string) (string, error) {
+	milestones, err := client.GetProjectMilestones(ctx, projectID)
+	if err != nil {
+		return "", err
+	}
+
+	milestone := findMilestoneByNameOrID(milestones, milestoneValue)
+	if milestone == nil {
+		milestoneNames := make([]string, 0, len(milestones))
+		for _, m := range milestones {
+			milestoneNames = append(milestoneNames, m.Name)
+		}
+		return "", fmt.Errorf("milestone %q not found. Available milestones: %s", milestoneValue, strings.Join(milestoneNames, ", "))
+	}
+
+	return milestone.ID, nil
+}
+
 var issueCreateCmd = &cobra.Command{
 	Use:     "create",
 	Aliases: []string{"new"},
 	Short:   "Create a new issue",
-	Long:    `Create a new issue in Linear.`,
+	Long: `Create a new issue in Linear.
+
+Examples:
+  linctl issue create --title "Fix bug" --team ENG
+  linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform"
+  linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -849,6 +956,8 @@ var issueCreateCmd = &cobra.Command{
 		teamKey, _ := cmd.Flags().GetString("team")
 		priority, _ := cmd.Flags().GetInt("priority")
 		assignToMe, _ := cmd.Flags().GetBool("assign-me")
+		projectValue, _ := cmd.Flags().GetString("project")
+		projectMilestoneValue, _ := cmd.Flags().GetString("project-milestone")
 
 		if title == "" {
 			output.Error("Title is required (--title)", plaintext, jsonOut)
@@ -890,6 +999,36 @@ var issueCreateCmd = &cobra.Command{
 			input["assigneeId"] = viewer.ID
 		}
 
+		if cmd.Flags().Changed("project") && !isUnsetValue(projectValue) {
+			projectID, err := resolveProjectID(context.Background(), client, projectValue)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to resolve project: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["projectId"] = projectID
+		}
+
+		if cmd.Flags().Changed("project-milestone") && !isUnsetValue(projectMilestoneValue) {
+			projectIDValue, ok := input["projectId"]
+			if !ok {
+				output.Error("--project-milestone requires --project", plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			projectID, ok := projectIDValue.(string)
+			if !ok || projectID == "" {
+				output.Error("--project-milestone requires a valid --project value", plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			milestoneID, err := resolveMilestoneID(context.Background(), client, projectID, projectMilestoneValue)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to resolve project milestone: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["projectMilestoneId"] = milestoneID
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -901,6 +1040,12 @@ var issueCreateCmd = &cobra.Command{
 			output.JSON(issue)
 		} else if plaintext {
 			fmt.Printf("Created issue %s: %s\n", issue.Identifier, issue.Title)
+			if issue.Project != nil {
+				fmt.Printf("Project: %s\n", issue.Project.Name)
+			}
+			if issue.ProjectMilestone != nil {
+				fmt.Printf("Milestone: %s\n", issue.ProjectMilestone.Name)
+			}
 		} else {
 			fmt.Printf("%s Created issue %s: %s\n",
 				color.New(color.FgGreen).Sprint("✓"),
@@ -908,6 +1053,12 @@ var issueCreateCmd = &cobra.Command{
 				issue.Title)
 			if issue.Assignee != nil {
 				fmt.Printf("  Assigned to: %s\n", color.New(color.FgCyan).Sprint(issue.Assignee.Name))
+			}
+			if issue.Project != nil {
+				fmt.Printf("  Project: %s\n", color.New(color.FgBlue).Sprint(issue.Project.Name))
+			}
+			if issue.ProjectMilestone != nil {
+				fmt.Printf("  Milestone: %s\n", color.New(color.FgBlue).Sprint(issue.ProjectMilestone.Name))
 			}
 		}
 	},
@@ -925,8 +1076,9 @@ Examples:
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
   linctl issue update LIN-123 --due-date "2024-12-31"
-  linctl issue update LIN-123 --parent LIN-100     # Make sub-issue of LIN-100
-  linctl issue update LIN-123 --parent none        # Remove parent (promote to top-level)
+  linctl issue update LIN-123 --project "Q1 Platform"
+  linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1"
+  linctl issue update LIN-123 --parent LIN-100
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -943,6 +1095,7 @@ Examples:
 
 		// Build update input
 		input := make(map[string]interface{})
+		var projectIDForMilestone string
 
 		// Handle title update
 		if cmd.Flags().Changed("title") {
@@ -1054,28 +1207,78 @@ Examples:
 		// Handle parent update
 		if cmd.Flags().Changed("parent") {
 			parentValue, _ := cmd.Flags().GetString("parent")
-			normalizedValue := strings.ToLower(strings.TrimSpace(parentValue))
-
-			switch normalizedValue {
-			case "none", "null", "":
-				// Remove parent relationship (promote to top-level issue)
+			if isUnsetValue(parentValue) {
 				input["parentId"] = nil
-			default:
-				// Validate that the parent issue exists
+			} else {
+				targetIssue, err := client.GetIssue(context.Background(), args[0])
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+
 				parentIssue, err := client.GetIssue(context.Background(), parentValue)
 				if err != nil {
 					output.Error(fmt.Sprintf("Failed to find parent issue '%s': %v", parentValue, err), plaintext, jsonOut)
 					os.Exit(1)
 				}
 
-				// Prevent self-referencing
-				currentIssueID := args[0]
-				if parentIssue.Identifier == currentIssueID || parentIssue.ID == currentIssueID {
+				if parentIssue.ID == targetIssue.ID || strings.EqualFold(parentIssue.Identifier, targetIssue.Identifier) {
 					output.Error("An issue cannot be its own parent", plaintext, jsonOut)
 					os.Exit(1)
 				}
 
 				input["parentId"] = parentIssue.ID
+			}
+		}
+
+		// Handle project update
+		if cmd.Flags().Changed("project") {
+			projectValue, _ := cmd.Flags().GetString("project")
+			if isUnsetValue(projectValue) {
+				input["projectId"] = nil
+			} else {
+				projectID, err := resolveProjectID(context.Background(), client, projectValue)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to resolve project: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				input["projectId"] = projectID
+				projectIDForMilestone = projectID
+			}
+		}
+
+		// Handle project milestone update
+		if cmd.Flags().Changed("project-milestone") {
+			projectMilestoneValue, _ := cmd.Flags().GetString("project-milestone")
+			if isUnsetValue(projectMilestoneValue) {
+				input["projectMilestoneId"] = nil
+			} else {
+				if projectInput, ok := input["projectId"]; ok && projectInput == nil {
+					output.Error("--project-milestone cannot be set when --project removes project assignment", plaintext, jsonOut)
+					os.Exit(1)
+				}
+
+				if projectIDForMilestone == "" {
+					targetIssue, err := client.GetIssue(context.Background(), args[0])
+					if err != nil {
+						output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
+						os.Exit(1)
+					}
+
+					if targetIssue.Project == nil || targetIssue.Project.ID == "" {
+						output.Error("--project-milestone requires the issue to be assigned to a project (use --project to set one)", plaintext, jsonOut)
+						os.Exit(1)
+					}
+
+					projectIDForMilestone = targetIssue.Project.ID
+				}
+
+				milestoneID, err := resolveMilestoneID(context.Background(), client, projectIDForMilestone, projectMilestoneValue)
+				if err != nil {
+					output.Error(fmt.Sprintf("Failed to resolve project milestone: %v", err), plaintext, jsonOut)
+					os.Exit(1)
+				}
+				input["projectMilestoneId"] = milestoneID
 			}
 		}
 
@@ -1096,11 +1299,23 @@ Examples:
 			output.JSON(issue)
 		} else if plaintext {
 			fmt.Printf("Updated issue %s\n", issue.Identifier)
+			if issue.Project != nil {
+				fmt.Printf("Project: %s\n", issue.Project.Name)
+			}
+			if issue.ProjectMilestone != nil {
+				fmt.Printf("Milestone: %s\n", issue.ProjectMilestone.Name)
+			}
 			if issue.Parent != nil {
 				fmt.Printf("Parent: %s - %s\n", issue.Parent.Identifier, issue.Parent.Title)
 			}
 		} else {
 			output.Success(fmt.Sprintf("Updated issue %s", issue.Identifier), plaintext, jsonOut)
+			if issue.Project != nil {
+				fmt.Printf("  Project: %s\n", color.New(color.FgBlue).Sprint(issue.Project.Name))
+			}
+			if issue.ProjectMilestone != nil {
+				fmt.Printf("  Milestone: %s\n", color.New(color.FgBlue).Sprint(issue.ProjectMilestone.Name))
+			}
 			if issue.Parent != nil {
 				fmt.Printf("  %s Parent: %s - %s\n",
 					color.New(color.FgBlue).Sprint("↳"),
@@ -1147,6 +1362,8 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().String("project", "", "Project name or ID to assign the issue to")
+	issueCreateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (requires --project)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1157,5 +1374,7 @@ func init() {
 	issueUpdateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress', 'Done')")
 	issueUpdateCmd.Flags().Int("priority", -1, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueUpdateCmd.Flags().String("due-date", "", "Due date (YYYY-MM-DD format, or empty to remove)")
-	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID or identifier (use 'none' to remove parent)")
+	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID/identifier (or 'none' to remove parent)")
+	issueUpdateCmd.Flags().String("project", "", "Project name or ID (or 'none' to remove project assignment)")
+	issueUpdateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (or 'none' to remove milestone)")
 }

@@ -1,6 +1,22 @@
 # Linear API Documentation Snapshots
 
-This directory contains comprehensive markdown snapshots of Linear's API documentation, organized by topic for easy reference.
+This directory contains markdown snapshots of Linear's API documentation, organized by topic for easy reference.
+
+## Scope and Intent
+
+- These files document **Linear's API capabilities**, not the exact current feature surface of `linctl`.
+- Some topics here (for example, webhooks or OAuth app flows) may be useful background for future CLI work but are not exposed as top-level commands today.
+- Treat these as offline API reference material; use `linctl --help` and `README.md` for current CLI behavior.
+
+## Current `linctl` Coverage (This Branch)
+
+- `issue`: list/search/get/assign/create/update
+  - Includes project linking (`--project`), project milestone linking (`--project-milestone`), and parent-child linking (`--parent`) on update flows.
+- `project`: list/get/create/update/delete (archive by default, permanent with `--permanent`)
+- `comment`: list/create
+- `team`: list/get/members
+- `user`: list/get/me
+- `auth`: login/status/logout
 
 ## Core API Documentation
 

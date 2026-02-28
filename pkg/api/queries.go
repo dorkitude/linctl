@@ -38,34 +38,35 @@ type Team struct {
 
 // Issue represents a Linear issue
 type Issue struct {
-	ID                  string       `json:"id"`
-	Identifier          string       `json:"identifier"`
-	Title               string       `json:"title"`
-	Description         string       `json:"description"`
-	Priority            int          `json:"priority"`
-	Estimate            *float64     `json:"estimate"`
-	CreatedAt           time.Time    `json:"createdAt"`
-	UpdatedAt           time.Time    `json:"updatedAt"`
-	DueDate             *string      `json:"dueDate"`
-	State               *State       `json:"state"`
-	Assignee            *User        `json:"assignee"`
-	Team                *Team        `json:"team"`
-	Labels              *Labels      `json:"labels"`
-	Children            *Issues      `json:"children"`
-	Parent              *Issue       `json:"parent"`
-	URL                 string       `json:"url"`
-	BranchName          string       `json:"branchName"`
-	Cycle               *Cycle       `json:"cycle"`
-	Project             *Project     `json:"project"`
-	Attachments         *Attachments `json:"attachments"`
-	Comments            *Comments    `json:"comments"`
-	SnoozedUntilAt      *time.Time   `json:"snoozedUntilAt"`
-	CompletedAt         *time.Time   `json:"completedAt"`
-	CanceledAt          *time.Time   `json:"canceledAt"`
-	ArchivedAt          *time.Time   `json:"archivedAt"`
-	TriagedAt           *time.Time   `json:"triagedAt"`
-	CustomerTicketCount int          `json:"customerTicketCount"`
-	PreviousIdentifiers []string     `json:"previousIdentifiers"`
+	ID                  string            `json:"id"`
+	Identifier          string            `json:"identifier"`
+	Title               string            `json:"title"`
+	Description         string            `json:"description"`
+	Priority            int               `json:"priority"`
+	Estimate            *float64          `json:"estimate"`
+	CreatedAt           time.Time         `json:"createdAt"`
+	UpdatedAt           time.Time         `json:"updatedAt"`
+	DueDate             *string           `json:"dueDate"`
+	State               *State            `json:"state"`
+	Assignee            *User             `json:"assignee"`
+	Team                *Team             `json:"team"`
+	Labels              *Labels           `json:"labels"`
+	Children            *Issues           `json:"children"`
+	Parent              *Issue            `json:"parent"`
+	URL                 string            `json:"url"`
+	BranchName          string            `json:"branchName"`
+	Cycle               *Cycle            `json:"cycle"`
+	Project             *Project          `json:"project"`
+	ProjectMilestone    *ProjectMilestone `json:"projectMilestone"`
+	Attachments         *Attachments      `json:"attachments"`
+	Comments            *Comments         `json:"comments"`
+	SnoozedUntilAt      *time.Time        `json:"snoozedUntilAt"`
+	CompletedAt         *time.Time        `json:"completedAt"`
+	CanceledAt          *time.Time        `json:"canceledAt"`
+	ArchivedAt          *time.Time        `json:"archivedAt"`
+	TriagedAt           *time.Time        `json:"triagedAt"`
+	CustomerTicketCount int               `json:"customerTicketCount"`
+	PreviousIdentifiers []string          `json:"previousIdentifiers"`
 	// Additional fields
 	Number                int              `json:"number"`
 	BoardOrder            float64          `json:"boardOrder"`
@@ -172,6 +173,17 @@ type Cycle struct {
 	Progress     float64    `json:"progress"`
 	CompletedAt  *time.Time `json:"completedAt"`
 	ScopeHistory []float64  `json:"scopeHistory"`
+}
+
+// ProjectMilestone represents a milestone within a Linear project.
+type ProjectMilestone struct {
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description *string    `json:"description"`
+	TargetDate  *string    `json:"targetDate"`
+	SortOrder   float64    `json:"sortOrder"`
+	CreatedAt   *time.Time `json:"createdAt"`
+	UpdatedAt   *time.Time `json:"updatedAt"`
 }
 
 // Attachment represents a file attachment or link
@@ -681,6 +693,13 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 						email
 					}
 				}
+				projectMilestone {
+					id
+					name
+					description
+					targetDate
+					sortOrder
+				}
 				attachments(first: 20) {
 					nodes {
 						id
@@ -1082,6 +1101,66 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 	return &response.Project, nil
 }
 
+// GetProjectMilestones returns all milestones for a specific project.
+func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
+	query := `
+		query ProjectMilestones($id: String!, $first: Int, $after: String) {
+			project(id: $id) {
+				projectMilestones(first: $first, after: $after) {
+					nodes {
+						id
+						name
+						description
+						targetDate
+						sortOrder
+						createdAt
+						updatedAt
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`
+
+	milestones := make([]ProjectMilestone, 0)
+	after := ""
+
+	for {
+		variables := map[string]interface{}{
+			"id":    projectID,
+			"first": 100,
+		}
+		if after != "" {
+			variables["after"] = after
+		}
+
+		var response struct {
+			Project struct {
+				ProjectMilestones struct {
+					Nodes    []ProjectMilestone `json:"nodes"`
+					PageInfo PageInfo           `json:"pageInfo"`
+				} `json:"projectMilestones"`
+			} `json:"project"`
+		}
+
+		err := c.Execute(ctx, query, variables, &response)
+		if err != nil {
+			return nil, err
+		}
+
+		milestones = append(milestones, response.Project.ProjectMilestones.Nodes...)
+		if !response.Project.ProjectMilestones.PageInfo.HasNextPage {
+			break
+		}
+		after = response.Project.ProjectMilestones.PageInfo.EndCursor
+	}
+
+	return milestones, nil
+}
+
 // CreateProject creates a new project
 func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}) (*Project, error) {
 	query := `
@@ -1297,6 +1376,16 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 							color
 						}
 					}
+					project {
+						id
+						name
+						state
+						progress
+					}
+					projectMilestone {
+						id
+						name
+					}
 					parent {
 						id
 						identifier
@@ -1363,6 +1452,21 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 							name
 							color
 						}
+					}
+					project {
+						id
+						name
+						state
+						progress
+					}
+					projectMilestone {
+						id
+						name
+					}
+					parent {
+						id
+						identifier
+						title
 					}
 				}
 			}
