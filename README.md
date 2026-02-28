@@ -498,10 +498,10 @@ Authentication credentials are stored securely in `~/.linctl-auth.json`.
 
 ### Temporary Override (Current Session)
 
-You can temporarily override your stored credentials using the `LINCTL_API_KEY` environment variable. This is useful for:
+You can temporarily override stored credentials using the `LINCTL_API_KEY` environment variable. This is useful for:
 - CI/CD pipelines
 - Testing with a different account
-- Running one-off commands without changing your stored credentials
+- One-off commands without modifying `~/.linctl-auth.json`
 
 ```bash
 # Override for a single command
@@ -509,14 +509,13 @@ LINCTL_API_KEY="lin_api_..." linctl issue list
 
 # Override for the current shell session
 export LINCTL_API_KEY="lin_api_..."
-linctl issue list
-linctl whoami  # Shows the user for the env var token
+linctl whoami
 
-# Clear the override
+# Clear override
 unset LINCTL_API_KEY
 ```
 
-**Precedence:** Environment variable > Config file (`~/.linctl-auth.json`)
+Precedence: `LINCTL_API_KEY` environment variable > config file (`~/.linctl-auth.json`).
 
 ## 📅 Time-based Filtering
 
