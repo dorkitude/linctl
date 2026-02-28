@@ -498,7 +498,7 @@ var issueGetCmd = &cobra.Command{
 			if issue.Comments != nil && len(issue.Comments.Nodes) > 0 {
 				fmt.Printf("\n## Recent Comments\n")
 				for _, comment := range issue.Comments.Nodes {
-					fmt.Printf("\n### %s - %s\n", comment.User.Name, comment.CreatedAt.Format("2006-01-02 15:04"))
+					fmt.Printf("\n### %s - %s\n", commentAuthorName(&comment), comment.CreatedAt.Format("2006-01-02 15:04"))
 					if comment.EditedAt != nil {
 						fmt.Printf("*(edited %s)*\n", comment.EditedAt.Format("2006-01-02 15:04"))
 					}
@@ -682,7 +682,7 @@ var issueGetCmd = &cobra.Command{
 			fmt.Printf("\n%s\n", color.New(color.FgYellow).Sprint("Recent Comments:"))
 			for _, comment := range issue.Comments.Nodes {
 				fmt.Printf("  💬 %s - %s\n",
-					color.New(color.FgCyan).Sprint(comment.User.Name),
+					color.New(color.FgCyan).Sprint(commentAuthorName(&comment)),
 					color.New(color.FgWhite, color.Faint).Sprint(comment.CreatedAt.Format("2006-01-02 15:04")))
 				// Show first line of comment
 				lines := strings.Split(comment.Body, "\n")
