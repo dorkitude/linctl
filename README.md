@@ -1,7 +1,7 @@
 # 🚀 linctl - Linear CLI Tool
 
 
-A comprehensive command-line interface for Linear's API, built with agents in mind (but nice for humans too).
+A comprehensive command-line interface for Linear's API, built with Go and Cobra.
 
 ## ✨ Features
 
@@ -127,6 +127,8 @@ linctl issue get LIN-123
 
 # Create a new issue
 linctl issue create --title "Bug fix" --team ENG
+linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform"
+linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
 
 # Assign issue to yourself
 linctl issue assign LIN-123
@@ -141,12 +143,15 @@ linctl issue update LIN-123 --state "In Progress"
 linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
-linctl issue update LIN-123 --parent LIN-456  # Set parent issue
+linctl issue update LIN-123 --project "Q1 Platform"
+linctl issue update LIN-123 --project "none"  # Remove project assignment
+linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1"
+linctl issue update LIN-123 --project-milestone "none"  # Remove project milestone
+linctl issue update LIN-123 --parent LIN-100
 linctl issue update LIN-123 --parent none  # Remove parent
 
 # Update multiple fields at once
-linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1
-linctl issue update LIN-123 --parent LIN-456 --title "Sub-task" --assignee me
+linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1 --project "Q1 Platform"
 ```
 
 ### 3. Project Management
@@ -249,6 +254,8 @@ linctl issue new [flags]      # Alias
   -t, --team string        Team key (required)
   --priority int       Priority 0-4 (default 3)
   -m, --assign-me          Assign to yourself
+  --project string         Project name or ID to assign the issue to
+  --project-milestone string  Project milestone name or ID (requires --project)
 
 # Assign issue to yourself
 linctl issue assign <issue-id>
@@ -264,6 +271,8 @@ linctl issue edit <issue-id> [flags]    # Alias
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
   --parent string          Parent issue ID/identifier (or 'none' to remove parent)
+  --project string         Project name or ID (or 'none' to remove project assignment)
+  --project-milestone string  Project milestone name or ID (or 'none' to remove milestone)
 
 # Archive issue (coming soon)
 linctl issue archive <issue-id>
@@ -623,13 +632,6 @@ linctl team members ENG --json | jq '. | length'
 
 # Export issue comments
 linctl comment list LIN-123 --json > issue-comments.json
-
-# Set up parent-child issue relationships
-linctl issue update LIN-124 --parent LIN-123  # Make LIN-124 a sub-issue of LIN-123
-linctl issue update LIN-125 --parent LIN-123  # Make LIN-125 also a sub-issue
-
-# Remove parent-child relationships
-linctl issue update LIN-124 --parent none
 ```
 
 ## 📡 Real-World Examples
