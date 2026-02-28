@@ -66,3 +66,39 @@ func TestFindMilestoneByNameOrID(t *testing.T) {
 		t.Fatalf("expected nil for unknown milestone")
 	}
 }
+
+func TestNormalizeValues(t *testing.T) {
+	got := normalizeValues([]string{"bug,urgent", " backend ", "", "ops, platform"})
+	want := []string{"bug", "urgent", "backend", "ops", "platform"}
+
+	if len(got) != len(want) {
+		t.Fatalf("normalizeValues length = %d, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("normalizeValues[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestFindLabelByNameOrID(t *testing.T) {
+	labels := []api.Label{
+		{ID: "lbl_1", Name: "bug"},
+		{ID: "lbl_2", Name: "Urgent"},
+	}
+
+	byID := findLabelByNameOrID(labels, "lbl_2")
+	if byID == nil || byID.ID != "lbl_2" {
+		t.Fatalf("expected to resolve label by ID")
+	}
+
+	byName := findLabelByNameOrID(labels, "urgent")
+	if byName == nil || byName.ID != "lbl_2" {
+		t.Fatalf("expected to resolve label by case-insensitive name")
+	}
+
+	none := findLabelByNameOrID(labels, "missing")
+	if none != nil {
+		t.Fatalf("expected nil for unknown label")
+	}
+}

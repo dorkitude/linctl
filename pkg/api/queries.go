@@ -160,6 +160,7 @@ type Label struct {
 	Color       string  `json:"color"`
 	Description *string `json:"description"`
 	Parent      *Label  `json:"parent"`
+	Team        *Team   `json:"team"`
 }
 
 // Cycle represents a Linear cycle (sprint)
@@ -1530,6 +1531,236 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
 	}
 
 	return &response.Team, nil
+}
+
+// GetTeamLabels returns all issue labels for a team key.
+func (c *Client) GetTeamLabels(ctx context.Context, teamKey string) ([]Label, error) {
+	query := `
+		query TeamLabels($key: String!, $first: Int, $after: String) {
+			team(id: $key) {
+				labels(first: $first, after: $after) {
+					nodes {
+						id
+						name
+						color
+						description
+						parent {
+							id
+							name
+						}
+						team {
+							id
+							key
+							name
+						}
+					}
+					pageInfo {
+						hasNextPage
+						endCursor
+					}
+				}
+			}
+		}
+	`
+
+	labels := make([]Label, 0)
+	after := ""
+
+	for {
+		variables := map[string]interface{}{
+			"key":   teamKey,
+			"first": 100,
+		}
+		if after != "" {
+			variables["after"] = after
+		}
+
+		var response struct {
+			Team struct {
+				Labels struct {
+					Nodes    []Label  `json:"nodes"`
+					PageInfo PageInfo `json:"pageInfo"`
+				} `json:"labels"`
+			} `json:"team"`
+		}
+
+		err := c.Execute(ctx, query, variables, &response)
+		if err != nil {
+			return nil, err
+		}
+
+		labels = append(labels, response.Team.Labels.Nodes...)
+		if !response.Team.Labels.PageInfo.HasNextPage {
+			break
+		}
+		after = response.Team.Labels.PageInfo.EndCursor
+	}
+
+	return labels, nil
+}
+
+// GetLabel returns a single label by ID.
+func (c *Client) GetLabel(ctx context.Context, id string) (*Label, error) {
+	query := `
+		query Label($id: String!) {
+			issueLabel(id: $id) {
+				id
+				name
+				color
+				description
+				parent {
+					id
+					name
+				}
+				team {
+					id
+					key
+					name
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		IssueLabel Label `json:"issueLabel"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.IssueLabel, nil
+}
+
+// CreateLabel creates a new issue label.
+func (c *Client) CreateLabel(ctx context.Context, input map[string]interface{}) (*Label, error) {
+	query := `
+		mutation CreateLabel($input: IssueLabelCreateInput!) {
+			issueLabelCreate(input: $input) {
+				success
+				issueLabel {
+					id
+					name
+					color
+					description
+					parent {
+						id
+						name
+					}
+					team {
+						id
+						key
+						name
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		IssueLabelCreate struct {
+			Success    bool  `json:"success"`
+			IssueLabel Label `json:"issueLabel"`
+		} `json:"issueLabelCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+	if !response.IssueLabelCreate.Success {
+		return nil, fmt.Errorf("failed to create label")
+	}
+
+	return &response.IssueLabelCreate.IssueLabel, nil
+}
+
+// UpdateLabel updates an existing issue label.
+func (c *Client) UpdateLabel(ctx context.Context, id string, input map[string]interface{}) (*Label, error) {
+	query := `
+		mutation UpdateLabel($id: String!, $input: IssueLabelUpdateInput!) {
+			issueLabelUpdate(id: $id, input: $input) {
+				success
+				issueLabel {
+					id
+					name
+					color
+					description
+					parent {
+						id
+						name
+					}
+					team {
+						id
+						key
+						name
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var response struct {
+		IssueLabelUpdate struct {
+			Success    bool  `json:"success"`
+			IssueLabel Label `json:"issueLabel"`
+		} `json:"issueLabelUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+	if !response.IssueLabelUpdate.Success {
+		return nil, fmt.Errorf("failed to update label")
+	}
+
+	return &response.IssueLabelUpdate.IssueLabel, nil
+}
+
+// DeleteLabel deletes an issue label by ID.
+func (c *Client) DeleteLabel(ctx context.Context, id string) error {
+	query := `
+		mutation DeleteLabel($id: String!) {
+			issueLabelDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		IssueLabelDelete struct {
+			Success bool `json:"success"`
+		} `json:"issueLabelDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+	if !response.IssueLabelDelete.Success {
+		return fmt.Errorf("failed to delete label")
+	}
+
+	return nil
 }
 
 // Comment represents a Linear comment

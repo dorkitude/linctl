@@ -991,7 +991,8 @@ var issueCreateCmd = &cobra.Command{
 Examples:
   linctl issue create --title "Fix bug" --team ENG
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform"
-  linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"`,
+  linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
+  linctl issue create --title "Fix bug" --team ENG --labels bug,urgent`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -1012,6 +1013,7 @@ Examples:
 		assignToMe, _ := cmd.Flags().GetBool("assign-me")
 		projectValue, _ := cmd.Flags().GetString("project")
 		projectMilestoneValue, _ := cmd.Flags().GetString("project-milestone")
+		labelValues, _ := cmd.Flags().GetStringSlice("labels")
 
 		if title == "" {
 			output.Error("Title is required (--title)", plaintext, jsonOut)
@@ -1083,6 +1085,19 @@ Examples:
 			input["projectMilestoneId"] = milestoneID
 		}
 
+		if cmd.Flags().Changed("labels") {
+			if len(normalizeValues(labelValues)) == 0 {
+				output.Error("--labels requires at least one label value", plaintext, jsonOut)
+				os.Exit(1)
+			}
+			labelIDs, err := resolveLabelIDsForTeam(context.Background(), client, team.Key, labelValues)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to resolve labels: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["labelIds"] = labelIDs
+		}
+
 		// Create issue
 		issue, err := client.CreateIssue(context.Background(), input)
 		if err != nil {
@@ -1100,6 +1115,13 @@ Examples:
 			if issue.ProjectMilestone != nil {
 				fmt.Printf("Milestone: %s\n", issue.ProjectMilestone.Name)
 			}
+			if issue.Labels != nil && len(issue.Labels.Nodes) > 0 {
+				labelNames := make([]string, 0, len(issue.Labels.Nodes))
+				for _, label := range issue.Labels.Nodes {
+					labelNames = append(labelNames, label.Name)
+				}
+				fmt.Printf("Labels: %s\n", strings.Join(labelNames, ", "))
+			}
 		} else {
 			fmt.Printf("%s Created issue %s: %s\n",
 				color.New(color.FgGreen).Sprint("✓"),
@@ -1113,6 +1135,13 @@ Examples:
 			}
 			if issue.ProjectMilestone != nil {
 				fmt.Printf("  Milestone: %s\n", color.New(color.FgBlue).Sprint(issue.ProjectMilestone.Name))
+			}
+			if issue.Labels != nil && len(issue.Labels.Nodes) > 0 {
+				labelNames := make([]string, 0, len(issue.Labels.Nodes))
+				for _, label := range issue.Labels.Nodes {
+					labelNames = append(labelNames, label.Name)
+				}
+				fmt.Printf("  Labels: %s\n", color.New(color.FgMagenta).Sprint(strings.Join(labelNames, ", ")))
 			}
 		}
 	},
@@ -1132,6 +1161,8 @@ Examples:
   linctl issue update LIN-123 --due-date "2024-12-31"
   linctl issue update LIN-123 --project "Q1 Platform"
   linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1"
+  linctl issue update LIN-123 --labels bug,urgent
+  linctl issue update LIN-123 --clear-labels
   linctl issue update LIN-123 --parent LIN-100
   linctl issue update LIN-123 --title "New title" --assignee me --priority 2`,
 	Args: cobra.ExactArgs(1),
@@ -1150,6 +1181,20 @@ Examples:
 		// Build update input
 		input := make(map[string]interface{})
 		var projectIDForMilestone string
+		var targetIssue *api.Issue
+
+		loadTargetIssue := func() *api.Issue {
+			if targetIssue != nil {
+				return targetIssue
+			}
+			issue, err := client.GetIssue(context.Background(), args[0])
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			targetIssue = issue
+			return targetIssue
+		}
 
 		// Handle title update
 		if cmd.Flags().Changed("title") {
@@ -1207,11 +1252,7 @@ Examples:
 			stateName, _ := cmd.Flags().GetString("state")
 
 			// First, get the issue to know which team it belongs to
-			issue, err := client.GetIssue(context.Background(), args[0])
-			if err != nil {
-				output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
-				os.Exit(1)
-			}
+			issue := loadTargetIssue()
 
 			// Get available states for the team
 			states, err := client.GetTeamStates(context.Background(), issue.Team.Key)
@@ -1264,11 +1305,7 @@ Examples:
 			if isUnsetValue(parentValue) {
 				input["parentId"] = nil
 			} else {
-				targetIssue, err := client.GetIssue(context.Background(), args[0])
-				if err != nil {
-					output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
-					os.Exit(1)
-				}
+				targetIssue := loadTargetIssue()
 
 				parentIssue, err := client.GetIssue(context.Background(), parentValue)
 				if err != nil {
@@ -1313,11 +1350,7 @@ Examples:
 				}
 
 				if projectIDForMilestone == "" {
-					targetIssue, err := client.GetIssue(context.Background(), args[0])
-					if err != nil {
-						output.Error(fmt.Sprintf("Failed to get issue: %v", err), plaintext, jsonOut)
-						os.Exit(1)
-					}
+					targetIssue := loadTargetIssue()
 
 					if targetIssue.Project == nil || targetIssue.Project.ID == "" {
 						output.Error("--project-milestone requires the issue to be assigned to a project (use --project to set one)", plaintext, jsonOut)
@@ -1334,6 +1367,37 @@ Examples:
 				}
 				input["projectMilestoneId"] = milestoneID
 			}
+		}
+
+		clearLabels, _ := cmd.Flags().GetBool("clear-labels")
+		if cmd.Flags().Changed("labels") && clearLabels {
+			output.Error("Cannot combine --labels with --clear-labels", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if clearLabels {
+			input["labelIds"] = []string{}
+		}
+
+		if cmd.Flags().Changed("labels") {
+			labelValues, _ := cmd.Flags().GetStringSlice("labels")
+			if len(normalizeValues(labelValues)) == 0 {
+				output.Error("--labels requires at least one label value. Use --clear-labels to remove all labels.", plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			targetIssue := loadTargetIssue()
+			if targetIssue.Team == nil || targetIssue.Team.Key == "" {
+				output.Error("Cannot resolve labels: issue has no team", plaintext, jsonOut)
+				os.Exit(1)
+			}
+
+			labelIDs, err := resolveLabelIDsForTeam(context.Background(), client, targetIssue.Team.Key, labelValues)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to resolve labels: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["labelIds"] = labelIDs
 		}
 
 		// Check if any updates were specified
@@ -1362,6 +1426,13 @@ Examples:
 			if issue.Parent != nil {
 				fmt.Printf("Parent: %s - %s\n", issue.Parent.Identifier, issue.Parent.Title)
 			}
+			if issue.Labels != nil && len(issue.Labels.Nodes) > 0 {
+				labelNames := make([]string, 0, len(issue.Labels.Nodes))
+				for _, label := range issue.Labels.Nodes {
+					labelNames = append(labelNames, label.Name)
+				}
+				fmt.Printf("Labels: %s\n", strings.Join(labelNames, ", "))
+			}
 		} else {
 			output.Success(fmt.Sprintf("Updated issue %s", issue.Identifier), plaintext, jsonOut)
 			if issue.Project != nil {
@@ -1375,6 +1446,13 @@ Examples:
 					color.New(color.FgBlue).Sprint("↳"),
 					color.New(color.FgCyan).Sprint(issue.Parent.Identifier),
 					issue.Parent.Title)
+			}
+			if issue.Labels != nil && len(issue.Labels.Nodes) > 0 {
+				labelNames := make([]string, 0, len(issue.Labels.Nodes))
+				for _, label := range issue.Labels.Nodes {
+					labelNames = append(labelNames, label.Name)
+				}
+				fmt.Printf("  Labels: %s\n", color.New(color.FgMagenta).Sprint(strings.Join(labelNames, ", ")))
 			}
 		}
 	},
@@ -1610,6 +1688,61 @@ func resolveGitHubRepoFromOrigin() (string, error) {
 	return "", fmt.Errorf("origin remote is not a supported GitHub URL: %s", remote)
 }
 
+func normalizeValues(values []string) []string {
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		parts := strings.Split(value, ",")
+		for _, part := range parts {
+			trimmed := strings.TrimSpace(part)
+			if trimmed != "" {
+				normalized = append(normalized, trimmed)
+			}
+		}
+	}
+	return normalized
+}
+
+func findLabelByNameOrID(labels []api.Label, value string) *api.Label {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return nil
+	}
+
+	for i := range labels {
+		if labels[i].ID == normalized || strings.EqualFold(labels[i].Name, normalized) {
+			return &labels[i]
+		}
+	}
+
+	return nil
+}
+
+func resolveLabelIDsForTeam(ctx context.Context, client *api.Client, teamKey string, values []string) ([]string, error) {
+	labels, err := client.GetTeamLabels(ctx, teamKey)
+	if err != nil {
+		return nil, err
+	}
+
+	resolved := make([]string, 0, len(values))
+	seen := make(map[string]bool)
+	for _, value := range normalizeValues(values) {
+		label := findLabelByNameOrID(labels, value)
+		if label == nil {
+			labelNames := make([]string, 0, len(labels))
+			for _, existing := range labels {
+				labelNames = append(labelNames, existing.Name)
+			}
+			return nil, fmt.Errorf("label %q not found in team %s. Available labels: %s", value, teamKey, strings.Join(labelNames, ", "))
+		}
+		if !seen[label.ID] {
+			seen[label.ID] = true
+			resolved = append(resolved, label.ID)
+		}
+	}
+
+	return resolved, nil
+}
+
 func init() {
 	rootCmd.AddCommand(issueCmd)
 	issueCmd.AddCommand(issueListCmd)
@@ -1651,6 +1784,7 @@ func init() {
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
 	issueCreateCmd.Flags().String("project", "", "Project name or ID to assign the issue to")
 	issueCreateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (requires --project)")
+	issueCreateCmd.Flags().StringSlice("labels", []string{}, "Labels to assign (names or IDs, comma-separated)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -1664,6 +1798,8 @@ func init() {
 	issueUpdateCmd.Flags().String("parent", "", "Parent issue ID/identifier (or 'none' to remove parent)")
 	issueUpdateCmd.Flags().String("project", "", "Project name or ID (or 'none' to remove project assignment)")
 	issueUpdateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (or 'none' to remove milestone)")
+	issueUpdateCmd.Flags().StringSlice("labels", []string{}, "Replace labels with provided names or IDs (comma-separated)")
+	issueUpdateCmd.Flags().Bool("clear-labels", false, "Remove all labels from the issue")
 
 	// Issue attach flags
 	issueAttachCmd.Flags().String("pr", "", "GitHub pull request URL or numeric PR number")

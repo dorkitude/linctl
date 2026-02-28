@@ -10,6 +10,7 @@ A comprehensive command-line interface for Linear's API, built with Go and Cobra
   - Sub-issue hierarchy with parent/child relationships
   - Git branch integration showing linked branches
   - Cycle (sprint) and project associations
+  - Label assignment on create/update (`--labels`, `--clear-labels`)
   - Project + project milestone assignment on create/update
   - Attachments and recent comments preview
   - Due dates, snoozed status, and completion tracking
@@ -17,7 +18,8 @@ A comprehensive command-line interface for Linear's API, built with Go and Cobra
 - 👥 **Team Management**: View teams, get team details, and list team members
 - 🚀 **Project Management**: List, view, create, update, archive, and permanently delete projects
 - 👤 **User Management**: List all users, view user details, and current user info
-- 💬 **Comments**: List and create comments on issues with time-aware formatting
+- 🏷️ **Label Management**: List, get, create, update, and delete issue labels
+- 💬 **Comments**: Full CRUD support for issue comments with time-aware formatting
 - 📎 **Attachments**: View file uploads and attachments on issues
   - Create URL/GitHub PR attachments with `linctl issue attach`
 - 🎨 **Multiple Output Formats**: Table, plaintext, and JSON output
@@ -129,6 +131,7 @@ linctl issue get LIN-123
 linctl issue create --title "Bug fix" --team ENG
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform"
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
+linctl issue create --title "Bug fix" --team ENG --labels bug,urgent
 
 # Assign issue to yourself
 linctl issue assign LIN-123
@@ -147,6 +150,8 @@ linctl issue update LIN-123 --project "Q1 Platform"
 linctl issue update LIN-123 --project "none"  # Remove project assignment
 linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1"
 linctl issue update LIN-123 --project-milestone "none"  # Remove project milestone
+linctl issue update LIN-123 --labels bug,urgent
+linctl issue update LIN-123 --clear-labels
 linctl issue update LIN-123 --parent LIN-100
 linctl issue update LIN-123 --parent none  # Remove parent
 
@@ -228,6 +233,29 @@ linctl comment list LIN-123
 
 # Add a comment to an issue
 linctl comment create LIN-123 --body "Fixed the authentication bug"
+
+# Get, update, and delete comments by ID
+linctl comment get COMMENT-ID
+linctl comment update COMMENT-ID --body "Updated comment body"
+linctl comment delete COMMENT-ID
+```
+
+### 7. Label Management
+```bash
+# List labels for a team
+linctl label list --team ENG
+
+# Get a label by ID
+linctl label get LABEL-ID
+
+# Create a label
+linctl label create --team ENG --name bug --color "#ff0000"
+
+# Update a label
+linctl label update LABEL-ID --name "critical bug"
+
+# Delete a label
+linctl label delete LABEL-ID
 ```
 
 ## 📖 Command Reference
@@ -277,6 +305,7 @@ linctl issue new [flags]      # Alias
   -t, --team string        Team key (required)
   --priority int       Priority 0-4 (default 3)
   -m, --assign-me          Assign to yourself
+  --labels strings         Labels to assign (names or IDs, comma-separated)
   --project string         Project name or ID to assign the issue to
   --project-milestone string  Project milestone name or ID (requires --project)
 
@@ -293,6 +322,8 @@ linctl issue edit <issue-id> [flags]    # Alias
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
+  --labels strings         Replace labels with provided names or IDs (comma-separated)
+  --clear-labels           Remove all labels from the issue
   --parent string          Parent issue ID/identifier (or 'none' to remove parent)
   --project string         Project name or ID (or 'none' to remove project assignment)
   --project-milestone string  Project milestone name or ID (or 'none' to remove milestone)
@@ -425,10 +456,49 @@ linctl comment create <issue-id> --body "Comment text"
 linctl comment add <issue-id> -b "Comment text"    # Alias
 linctl comment new <issue-id> -b "Comment text"    # Alias
 
+# Get/update/delete comment by ID
+linctl comment get <comment-id>
+linctl comment show <comment-id>    # Alias
+linctl comment update <comment-id> --body "Updated text"
+linctl comment edit <comment-id> -b "Updated text"  # Alias
+linctl comment delete <comment-id>
+linctl comment rm <comment-id>      # Alias
+
 # Examples:
 linctl comment create LIN-123 --body "I've started working on this"
 linctl comment add LIN-123 -b "Fixed in commit abc123"
 linctl comment create LIN-456 --body "@john please review this PR"
+```
+
+### Label Commands
+```bash
+# List labels for a team
+linctl label list --team <team-key>
+linctl label ls --team <team-key>     # Alias
+
+# Get label details
+linctl label get <label-id>
+
+# Create label
+linctl label create --team <team-key> --name <name> [flags]
+# Key flags:
+  --color string          Hex color (e.g. #ff0000)
+  --description string    Description
+  --parent string         Parent label name or ID
+
+# Update label
+linctl label update <label-id> [flags]
+# Key flags:
+  --name string
+  --color string
+  --description string    Empty string clears description
+  --parent string         Parent label name or ID
+  --clear-parent          Remove parent label
+
+# Delete label
+linctl label delete <label-id>
+linctl label rm <label-id>             # Alias
+linctl label remove <label-id>         # Alias
 ```
 
 ## 🎨 Output Formats
