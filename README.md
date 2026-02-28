@@ -19,6 +19,7 @@ A comprehensive command-line interface for Linear's API, built with Go and Cobra
 - 👤 **User Management**: List all users, view user details, and current user info
 - 💬 **Comments**: List and create comments on issues with time-aware formatting
 - 📎 **Attachments**: View file uploads and attachments on issues
+  - Create URL/GitHub PR attachments with `linctl issue attach`
 - 🎨 **Multiple Output Formats**: Table, plaintext, and JSON output
 - ⚡ **Performance**: Fast and lightweight CLI tool
 - 🔄 **Flexible Sorting**: Sort lists by Linear's default order, creation date, or update date
@@ -104,6 +105,10 @@ linctl issue list --state "In Progress"
 # List issues sorted by update date
 linctl issue list --sort updated
 
+# Filter issues by cycle
+linctl issue list --cycle current
+linctl issue list --cycle 42
+
 # Search issues using Linear's full-text index (shares the same filters as list)
 linctl issue search "login bug" --team ENG
 linctl issue search "customer:" --include-completed --include-archived
@@ -154,6 +159,11 @@ linctl issue update LIN-124 --parent none
 
 # Update multiple fields at once
 linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1 --project "Q1 Platform"
+
+# Attach a GitHub PR or external URL
+linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
+linctl issue attach LIN-123 --pr 456  # Resolves repo from git remote origin
+linctl issue attach LIN-123 --url https://example.com/spec --title "Spec"
 ```
 
 ### 3. Project Management
@@ -249,6 +259,7 @@ linctl issue ls [flags]     # Short alias
   -s, --state string       Filter by state name
   -t, --team string        Filter by team key
   -r, --priority int       Filter by priority (0-4, default: -1)
+  -y, --cycle string       Filter by cycle ('current' or cycle number)
   -l, --limit int          Maximum results (default 50)
   -o, --sort string        Sort order: linear (default), created, updated
   -n, --newer-than string  Show items created after this time (default: 6_months_ago, use 'all_time' for no filter)
@@ -285,6 +296,15 @@ linctl issue edit <issue-id> [flags]    # Alias
   --parent string          Parent issue ID/identifier (or 'none' to remove parent)
   --project string         Project name or ID (or 'none' to remove project assignment)
   --project-milestone string  Project milestone name or ID (or 'none' to remove milestone)
+
+# Attach URL/PR to issue
+linctl issue attach <issue-id> [flags]
+# Flags:
+  --pr string              GitHub PR URL or PR number
+  --url string             URL to attach
+  --title string           Attachment title (required with --url)
+  --subtitle string        Attachment subtitle
+  --icon-url string        Attachment icon URL
 
 ```
 
