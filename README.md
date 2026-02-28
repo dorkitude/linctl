@@ -10,20 +10,15 @@ A comprehensive command-line interface for Linear's API, built with Go and Cobra
   - Sub-issue hierarchy with parent/child relationships
   - Git branch integration showing linked branches
   - Cycle (sprint) and project associations
+  - Project + project milestone assignment on create/update
   - Attachments and recent comments preview
   - Due dates, snoozed status, and completion tracking
   - Full-text search via `linctl issue search`
 - 👥 **Team Management**: View teams, get team details, and list team members
-- 🚀 **Project Tracking**: Comprehensive project information
-  - Progress visualization with issue statistics
-  - Team and member associations
-  - Initiative hierarchy
-  - Recent issues preview
-  - Timeline tracking (created, updated, completed dates)
+- 🚀 **Project Management**: List, view, create, update, archive, and permanently delete projects
 - 👤 **User Management**: List all users, view user details, and current user info
 - 💬 **Comments**: List and create comments on issues with time-aware formatting
 - 📎 **Attachments**: View file uploads and attachments on issues
-- 🔗 **Webhooks**: Configure and manage webhooks
 - 🎨 **Multiple Output Formats**: Table, plaintext, and JSON output
 - ⚡ **Performance**: Fast and lightweight CLI tool
 - 🔄 **Flexible Sorting**: Sort lists by Linear's default order, creation date, or update date
@@ -57,7 +52,7 @@ cd linctl
 make deps        # Install dependencies
 go run main.go   # Run directly without building
 make dev         # Or build and run in development mode
-make test        # Run all tests
+make test        # Run smoke tests
 make lint        # Run linter
 make fmt         # Format code
 linctl docs      # Render the README.md
@@ -150,6 +145,13 @@ linctl issue update LIN-123 --project-milestone "none"  # Remove project milesto
 linctl issue update LIN-123 --parent LIN-100
 linctl issue update LIN-123 --parent none  # Remove parent
 
+# Set up parent-child issue relationships
+linctl issue update LIN-124 --parent LIN-123  # Make LIN-124 a sub-issue of LIN-123
+linctl issue update LIN-125 --parent LIN-123  # Make LIN-125 also a sub-issue
+
+# Remove parent-child relationships
+linctl issue update LIN-124 --parent none
+
 # Update multiple fields at once
 linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1 --project "Q1 Platform"
 ```
@@ -159,8 +161,8 @@ linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1 --
 # List all projects (shows IDs)
 linctl project list
 
-# Filter projects by team
-linctl project list --team ENG
+# Filter projects by state
+linctl project list --state started
 
 # List projects created in the last month (instead of default 6 months)
 linctl project list --newer-than 1_month_ago
@@ -170,6 +172,16 @@ linctl project list --newer-than all_time
 
 # Get project details (use ID from list command)
 linctl project get 65a77a62-ec5e-491e-b1d9-84aebee01b33
+
+# Create a project
+linctl project create --name "Q1 Platform" --team ENG --state started
+
+# Update a project
+linctl project update PROJECT-ID --lead me --target-date 2026-06-30
+
+# Archive or delete a project
+linctl project delete PROJECT-ID
+linctl project delete PROJECT-ID --permanent --force
 ```
 
 ### 4. Team Management
@@ -274,8 +286,6 @@ linctl issue edit <issue-id> [flags]    # Alias
   --project string         Project name or ID (or 'none' to remove project assignment)
   --project-milestone string  Project milestone name or ID (or 'none' to remove milestone)
 
-# Archive issue (coming soon)
-linctl issue archive <issue-id>
 ```
 
 ### Team Commands
@@ -319,8 +329,36 @@ linctl project ls [flags]     # Alias
 linctl project get <project-id>
 linctl project show <project-id>  # Alias
 
-# Create project (coming soon)
+# Create project
 linctl project create [flags]
+# Key flags:
+  --name string          Project name (required)
+  -t, --team strings     Team key(s) (required)
+  -d, --description      Description
+  -s, --state            planned|started|paused
+  --lead                 email|name|me
+  --start-date           YYYY-MM-DD
+  --target-date          YYYY-MM-DD
+  --color                Hex color
+
+# Update project
+linctl project update <project-id> [flags]
+# Key flags:
+  --name string
+  -d, --description
+  -s, --state            planned|started|paused|completed|canceled
+  --lead                 email|name|me|none
+  --start-date           YYYY-MM-DD or empty to clear
+  --target-date          YYYY-MM-DD or empty to clear
+  --color                Hex color
+
+# Delete/archive project
+linctl project delete <project-id> [flags]
+linctl project rm <project-id> [flags]
+linctl project remove <project-id> [flags]
+# Key flags:
+  --permanent            Permanently delete instead of archive
+  -f, --force            Skip confirmation prompt
 ```
 
 ### User Commands
@@ -567,35 +605,17 @@ linctl project list --newer-than all_time --sort created
 
 ## 🧪 Testing
 
-linctl includes comprehensive unit and integration tests to ensure reliability.
+Current test paths:
 
-### Running Tests
 ```bash
-# Run all tests  (currently just a smoke test)
+# Go unit tests
+go test ./...
+
+# CLI smoke tests
 make test
+# or:
+./smoke_test.sh
 ```
-
-### Integration Testing
-Integration tests require a Linear API key. Create a `.env.test` file:
-```bash
-cp .env.test.example .env.test
-# Edit .env.test and add your LINEAR_TEST_API_KEY
-```
-
-Or set it as an environment variable:
-```bash
-export LINEAR_TEST_API_KEY="your-test-api-key"
-make test-integration
-```
-
-⚠️ **Note**: Integration tests are read-only and safe to run with production API keys.
-
-### Test Structure
-- `tests/unit/` - Unit tests with mocked API responses
-- `tests/integration/` - End-to-end tests with real Linear API
-- `tests/testutils/` - Shared test utilities and helpers
-
-See [tests/README.md](tests/README.md) for detailed testing documentation.
 
 ## 🤖 Scripting & Automation
 
@@ -621,8 +641,8 @@ echo "All time: $(linctl issue list --newer-than all_time --json | jq '. | lengt
 # Create and assign issue in one command
 linctl issue create --title "Fix bug" --team ENG --assign-me --json
 
-# Get all projects for a team
-linctl project list --team ENG --json | jq '.[] | {name, progress}'
+# Get all projects with progress
+linctl project list --json | jq '.[] | {name, progress}'
 
 # List all admin users
 linctl user list --json | jq '.[] | select(.admin == true) | {name, email}'
