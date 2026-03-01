@@ -15,6 +15,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
 - **Labels**: list/get/create/update/delete.
 - **Comments**: list/get/create/update/delete.
 - **Agent Sessions**: inspect issue agent session state and mention delegated/active agents.
+- **Raw GraphQL**: execute arbitrary Linear GraphQL using your `linctl` auth context.
 - **Output modes**: table, plaintext, and JSON.
 - **Sorting and time filters**: reusable list/search filtering patterns.
 - **Built-in docs**: `linctl docs`.
@@ -271,6 +272,24 @@ linctl agent mention ENG-80 "Please investigate this failure"
 linctl agent mention ENG-80 --agent agent-runner "Please rerun tests"
 ```
 
+### 9. Raw GraphQL (API Escape Hatch)
+```bash
+# Direct query
+linctl graphql 'query { viewer { id name email } }'
+
+# From a .graphql file
+linctl graphql --file query.graphql
+
+# With inline variables JSON
+linctl graphql --query 'query($k:String!){ team(id:$k){ id key name } }' --variables '{"k":"ENG"}'
+
+# With variables file
+linctl graphql --file query.graphql --variables-file vars.json
+
+# Pipe query from stdin
+cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
+```
+
 ## Command Reference
 
 ### Global Flags
@@ -286,6 +305,18 @@ linctl auth login         # Same as above
 linctl auth status        # Check authentication status
 linctl auth logout        # Clear stored credentials
 linctl whoami            # Show current user
+```
+
+### GraphQL Command
+```bash
+# Execute raw GraphQL operation
+linctl graphql [query] [flags]
+
+# Flags:
+  -q, --query string           Query/mutation string
+  -f, --file string            Path to a .graphql file
+      --variables string       Variables as JSON object string
+      --variables-file string  Path to JSON object file with variables
 ```
 
 ### Issue Commands
