@@ -244,6 +244,7 @@ linctl label get LABEL-ID
 
 # Create a label
 linctl label create --team ENG --name bug --color "#ff0000"
+linctl label create --team ENG --name "backend" --is-group
 
 # Update a label
 linctl label update LABEL-ID --name "critical bug"
@@ -503,6 +504,7 @@ linctl label create --team <team-key> --name <name> [flags]
 # Key flags:
   --color string          Hex color (e.g. #ff0000)
   --description string    Description
+  --is-group              Create as a group label (organizes child labels)
   --parent string         Parent label name or ID
 
 # Update label

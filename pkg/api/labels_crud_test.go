@@ -108,6 +108,43 @@ func TestCreateLabel(t *testing.T) {
 	}
 }
 
+func TestCreateLabelWithIsGroup(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req gqlTestRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		if !strings.Contains(req.Query, "mutation CreateLabel(") {
+			t.Fatalf("expected CreateLabel mutation, got: %s", req.Query)
+		}
+
+		input, ok := req.Variables["input"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected input map, got %#v", req.Variables["input"])
+		}
+		if input["isGroup"] != true {
+			t.Fatalf("expected isGroup true, got %v", input["isGroup"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":{"issueLabelCreate":{"success":true,"issueLabel":{"id":"label-2","name":"backend","color":"#0055ff","description":"Backend group","parent":null,"team":{"id":"t1","key":"ENG","name":"Engineering"}}}}}`))
+	}))
+	defer srv.Close()
+
+	c := NewClientWithURL(srv.URL, "Bearer test")
+	label, err := c.CreateLabel(context.Background(), map[string]interface{}{
+		"name":    "backend",
+		"teamId":  "t1",
+		"isGroup": true,
+	})
+	if err != nil {
+		t.Fatalf("CreateLabel returned error: %v", err)
+	}
+	if label.Name != "backend" {
+		t.Fatalf("expected backend, got %s", label.Name)
+	}
+}
+
 func TestUpdateLabel(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req gqlTestRequest
