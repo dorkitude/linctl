@@ -290,6 +290,13 @@ linctl auth logout
 linctl whoami
 ```
 
+### Raw GraphQL
+```bash
+linctl graphql [query]
+linctl graphql --query 'query { viewer { id } }'
+linctl graphql --file query.graphql --variables-file vars.json
+```
+
 ### Issues
 ```bash
 linctl issue list|ls
@@ -361,7 +368,7 @@ linctl agent mention <issue-id> [message...]
 
 Not all modern Linear API domains are exposed in `linctl` commands yet (for example deeper roadmap/customer/admin/app management surfaces). For unsupported flows:
 1. Query schema explorer for exact operation and input names.
-2. Execute GraphQL directly against `https://api.linear.app/graphql`.
+2. Execute the operation via `linctl graphql` so auth/config/output stay in one tool.
 3. Add CLI coverage only when workflow value is clear.
 
 ## 9) Reliability Checklist
