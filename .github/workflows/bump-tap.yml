@@ -11,6 +11,8 @@ permissions:
 jobs:
   bump:
     runs-on: ubuntu-latest
+    env:
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -21,6 +23,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
+
+      - name: Validate tap token
+        run: |
+          if [ -z "${HOMEBREW_TAP_TOKEN:-}" ]; then
+            echo "::error::Missing HOMEBREW_TAP_TOKEN secret. Configure it in repo Settings > Secrets and variables > Actions."
+            exit 1
+          fi
 
       - name: Prepare variables
         env:
@@ -36,13 +45,11 @@ jobs:
           echo "SHA256=$SHASUM" >> $GITHUB_ENV
 
       - name: Clone tap repo and push branch
-        env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
           set -e
           git config --global user.name "${{ github.actor }}"
           git config --global user.email "${{ github.actor }}@users.noreply.github.com"
-          git clone https://github.com/dorkitude/homebrew-linctl.git
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/dorkitude/homebrew-linctl.git"
           cd homebrew-linctl
           BRANCH="bump-linctl-${TAG#v}"
           git checkout -b "$BRANCH"
@@ -52,11 +59,11 @@ jobs:
           rm -f Formula/linctl.rb.bak
           git add Formula/linctl.rb
           git commit -m "linctl: bump to ${TAG}"
-          git push "https://${GH_TOKEN}@github.com/dorkitude/homebrew-linctl.git" HEAD:"$BRANCH"
+          git push origin HEAD:"$BRANCH"
 
       - name: Open PR on tap repo
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ env.HOMEBREW_TAP_TOKEN }}
         run: |
           cd homebrew-linctl
           BRANCH="bump-linctl-${TAG#v}"
@@ -65,4 +72,3 @@ jobs:
             --body "Update formula to ${TAG}." \
             --base master \
             --head "$BRANCH"
-
