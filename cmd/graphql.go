@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -24,6 +25,7 @@ Use this when the Linear API supports features that aren't exposed by first-clas
 Examples:
   linctl graphql 'query { viewer { id name email } }'
   linctl graphql --file query.graphql
+  cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
   linctl graphql --query 'query($k:String!){ team(id:$k){ id key name } }' --variables '{"k":"ENG"}'
   linctl graphql --file query.graphql --variables-file vars.json`,
 	Args: cobra.MaximumNArgs(1),
@@ -64,9 +66,16 @@ Examples:
 	},
 }
 
+var graphqlInputStdin = os.Stdin
+
 func resolveGraphQLQueryInput(cmd *cobra.Command, args []string) (string, error) {
 	queryFlag, _ := cmd.Flags().GetString("query")
 	fileFlag, _ := cmd.Flags().GetString("file")
+
+	stdinPiped, err := isGraphQLStdinPiped()
+	if err != nil {
+		return "", fmt.Errorf("failed to inspect stdin: %w", err)
+	}
 
 	sources := 0
 	if strings.TrimSpace(queryFlag) != "" {
@@ -78,12 +87,27 @@ func resolveGraphQLQueryInput(cmd *cobra.Command, args []string) (string, error)
 	if len(args) > 0 && strings.TrimSpace(args[0]) != "" {
 		sources++
 	}
+	if stdinPiped {
+		sources++
+	}
 
 	if sources == 0 {
-		return "", fmt.Errorf("no query provided; use positional query, --query, or --file")
+		return "", fmt.Errorf("no query provided; use positional query, --query, --file, or pipe via stdin")
 	}
 	if sources > 1 {
-		return "", fmt.Errorf("provide only one query source: positional query, --query, or --file")
+		return "", fmt.Errorf("provide only one query source: positional query, --query, --file, or stdin")
+	}
+
+	if stdinPiped {
+		content, err := io.ReadAll(graphqlInputStdin)
+		if err != nil {
+			return "", fmt.Errorf("failed to read stdin query: %w", err)
+		}
+		query := strings.TrimSpace(string(content))
+		if query == "" {
+			return "", fmt.Errorf("stdin query is empty")
+		}
+		return query, nil
 	}
 
 	if strings.TrimSpace(queryFlag) != "" {
@@ -102,6 +126,14 @@ func resolveGraphQLQueryInput(cmd *cobra.Command, args []string) (string, error)
 		return "", fmt.Errorf("query file %q is empty", fileFlag)
 	}
 	return query, nil
+}
+
+func isGraphQLStdinPiped() (bool, error) {
+	info, err := graphqlInputStdin.Stat()
+	if err != nil {
+		return false, err
+	}
+	return (info.Mode() & os.ModeCharDevice) == 0, nil
 }
 
 func resolveGraphQLVariablesInput(cmd *cobra.Command) (map[string]interface{}, error) {
@@ -137,4 +169,3 @@ func init() {
 	graphqlCmd.Flags().String("variables", "", "Variables as JSON object string")
 	graphqlCmd.Flags().String("variables-file", "", "Path to JSON object file for variables")
 }
-

@@ -13,6 +13,7 @@ import (
 
 func resetGraphQLFlags(t *testing.T) {
 	t.Helper()
+	graphqlInputStdin = os.Stdin
 	for _, name := range []string{"query", "file", "variables", "variables-file"} {
 		flag := graphqlCmd.Flags().Lookup(name)
 		if flag == nil {
@@ -77,6 +78,47 @@ func TestResolveGraphQLInputsFromFiles(t *testing.T) {
 	}
 }
 
+func TestResolveGraphQLQueryInputFromStdin(t *testing.T) {
+	resetGraphQLFlags(t)
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer reader.Close()
+
+	_, _ = writer.WriteString("query { viewer { id } }")
+	_ = writer.Close()
+
+	graphqlInputStdin = reader
+
+	query, err := resolveGraphQLQueryInput(graphqlCmd, nil)
+	if err != nil {
+		t.Fatalf("resolveGraphQLQueryInput returned error: %v", err)
+	}
+	if !strings.Contains(query, "viewer") {
+		t.Fatalf("unexpected query from stdin: %q", query)
+	}
+}
+
+func TestResolveGraphQLQueryInputRejectsMultipleSourcesWithStdin(t *testing.T) {
+	resetGraphQLFlags(t)
+
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	defer reader.Close()
+	_, _ = writer.WriteString("query { viewer { id } }")
+	_ = writer.Close()
+	graphqlInputStdin = reader
+
+	_ = graphqlCmd.Flags().Set("query", "query { viewer { name } }")
+	if _, err := resolveGraphQLQueryInput(graphqlCmd, nil); err == nil {
+		t.Fatal("expected multiple-source error when both stdin and --query are provided")
+	}
+}
+
 func TestGraphQLCmdExecutesRawQuery(t *testing.T) {
 	origTransport := http.DefaultTransport
 	defer func() { http.DefaultTransport = origTransport }()
@@ -119,4 +161,3 @@ func TestGraphQLCmdExecutesRawQuery(t *testing.T) {
 		t.Fatalf("expected variables[k]=ENG, got %#v", sawVars["k"])
 	}
 }
-

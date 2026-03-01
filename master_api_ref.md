@@ -295,6 +295,7 @@ linctl whoami
 linctl graphql [query]
 linctl graphql --query 'query { viewer { id } }'
 linctl graphql --file query.graphql --variables-file vars.json
+cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
 ```
 
 ### Issues

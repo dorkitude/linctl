@@ -285,6 +285,9 @@ linctl graphql --query 'query($k:String!){ team(id:$k){ id key name } }' --varia
 
 # With variables file
 linctl graphql --file query.graphql --variables-file vars.json
+
+# Pipe query from stdin
+cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
 ```
 
 ## Command Reference
