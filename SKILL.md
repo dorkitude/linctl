@@ -21,6 +21,7 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 - `issue list` and `issue search` exclude completed/canceled by default.
 - `issue search` may also need `--include-archived` for archived matches.
 - `issue list --cycle current` can validly return no rows if no active cycle exists.
+- Parent/sub-issue links are set via `issue update --parent` (not `issue create`).
 - If results look incomplete, retry with:
   - `--newer-than all_time`
   - `--include-completed`
