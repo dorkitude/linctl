@@ -10,7 +10,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
   - cycles, labels, delegation, projects/milestones, parent/sub-issue links
   - due dates, attachments, comments, and rich issue detail output
 - **Projects**: list/get/create/update/delete/archive.
-- **Teams**: list/get/members/statuses/status-update.
+- **Teams**: list/get/members/states/state-update.
 - **Users**: list/get/me.
 - **Labels**: list/get/create/update/delete.
 - **Comments**: list/get/create/update/delete.
@@ -123,6 +123,7 @@ linctl issue get LIN-123
 linctl issue create --title "Bug fix" --team ENG
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform"
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
+linctl issue create --title "Bug fix" --team ENG --state "In Progress"
 linctl issue create --title "Bug fix" --team ENG --labels bug,urgent
 linctl issue create --title "Bug fix" --team ENG --delegate agent-runner
 
@@ -205,11 +206,11 @@ linctl team get ENG
 # List team members
 linctl team members ENG
 
-# List workflow statuses for a team
-linctl team statuses ENG
+# List workflow states for a team
+linctl team states ENG
 
-# Update a workflow status
-linctl team status-update STATE-ID --name "Ready" --color "#abc"
+# Update a workflow state
+linctl team state-update STATE-ID --name "Ready" --color "#abc"
 ```
 
 ### 5. User Management
@@ -349,6 +350,7 @@ linctl issue new [flags]      # Alias
   -t, --team string        Team key (required)
   --priority int       Priority 0-4 (default 3)
   -m, --assign-me          Assign to yourself
+  -s, --state string       State name (e.g., 'Todo', 'In Progress')
   --delegate string        Delegate to user/agent (email, name, or displayName)
   --labels strings         Labels to assign (names or IDs, comma-separated)
   --project string         Project name or ID to assign the issue to
@@ -416,20 +418,20 @@ linctl team get DESIGN      # Shows Design team details
 # List team members with roles and status
 linctl team members <team-key>
 
-# List workflow statuses (Backlog, Todo, In Progress, etc.)
-linctl team statuses <team-key>
+# List workflow states (Backlog, Todo, In Progress, etc.)
+linctl team states <team-key>
 
-# Update a workflow status
-linctl team status-update <state-id> [flags]
+# Update a workflow state
+linctl team state-update <state-id> [flags]
 # Key flags:
-  --name string            New name for the status
+  --name string            New name for the state
   --color string           New color (hex)
   --description string     New description (empty string clears)
 
 # Examples:
 linctl team members ENG     # Lists all Engineering team members
-linctl team statuses ENG    # Lists workflow statuses for Engineering
-linctl team status-update abc123 --name "Ready" --color "#00ff00"
+linctl team states ENG      # Lists workflow states for Engineering
+linctl team state-update abc123 --name "Ready" --color "#00ff00"
 ```
 
 ### Project Commands
