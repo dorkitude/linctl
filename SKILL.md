@@ -106,7 +106,7 @@ linctl comment update <COMMENT_ID> --body "Updated note"
 linctl comment delete <COMMENT_ID>
 
 # Update a workflow status
-linctl team status-update <STATE_ID> --name "Ready" --color "#00ff00"
+linctl team status-update <STATE_ID> --name "Ready"
 
 # Mention delegated/active agent with message
 linctl agent mention LIN-123 "Please pick this up."
