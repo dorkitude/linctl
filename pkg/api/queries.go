@@ -1935,6 +1935,47 @@ func (c *Client) GetTeamStates(ctx context.Context, teamKey string) ([]WorkflowS
 	return response.Team.States.Nodes, nil
 }
 
+// UpdateWorkflowState updates an existing workflow state.
+func (c *Client) UpdateWorkflowState(ctx context.Context, id string, input map[string]interface{}) (*WorkflowState, error) {
+	query := `
+		mutation WorkflowStateUpdate($id: String!, $input: WorkflowStateUpdateInput!) {
+			workflowStateUpdate(id: $id, input: $input) {
+				success
+				workflowState {
+					id
+					name
+					type
+					color
+					description
+					position
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var response struct {
+		WorkflowStateUpdate struct {
+			Success       bool          `json:"success"`
+			WorkflowState WorkflowState `json:"workflowState"`
+		} `json:"workflowStateUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+	if !response.WorkflowStateUpdate.Success {
+		return nil, fmt.Errorf("failed to update workflow state")
+	}
+
+	return &response.WorkflowStateUpdate.WorkflowState, nil
+}
+
 // GetTeamMembers returns members of a specific team
 func (c *Client) GetTeamMembers(ctx context.Context, teamKey string) (*Users, error) {
 	query := `

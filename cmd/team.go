@@ -286,13 +286,149 @@ var teamMembersCmd = &cobra.Command{
 	},
 }
 
+var teamStatesCmd = &cobra.Command{
+	Use:     "statuses TEAM-KEY",
+	Aliases: []string{"states"},
+	Short:   "List workflow statuses for a team",
+	Long:    `List all workflow statuses (e.g. Backlog, Todo, In Progress, Done) for a specific team.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		teamKey := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error(fmt.Sprintf("Authentication failed: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+
+		states, err := client.GetTeamStates(context.Background(), teamKey)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to get workflow statuses: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(states)
+		} else if plaintext {
+			fmt.Println("Name\tType\tColor\tID")
+			for _, s := range states {
+				fmt.Printf("%s\t%s\t%s\t%s\n", s.Name, s.Type, s.Color, s.ID)
+			}
+		} else {
+			headers := []string{"Name", "Type", "Color", "ID"}
+			rows := [][]string{}
+
+			for _, s := range states {
+				rows = append(rows, []string{
+					color.New(color.FgCyan, color.Bold).Sprint(s.Name),
+					s.Type,
+					s.Color,
+					s.ID,
+				})
+			}
+
+			output.Table(output.TableData{
+				Headers: headers,
+				Rows:    rows,
+			}, plaintext, jsonOut)
+
+			if !plaintext && !jsonOut {
+				fmt.Printf("\n%s %d workflow statuses in team %s\n",
+					color.New(color.FgGreen).Sprint("✓"),
+					len(states),
+					color.New(color.FgCyan).Sprint(teamKey))
+			}
+		}
+	},
+}
+
+var teamStateUpdateCmd = &cobra.Command{
+	Use:     "status-update STATE-ID",
+	Aliases: []string{"state-update"},
+	Short:   "Update a workflow status",
+	Long:    `Update an existing workflow status's name, color, or description.`,
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+		stateID := args[0]
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error("Not authenticated. Run 'linctl auth' first.", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		input := make(map[string]interface{})
+
+		if cmd.Flags().Changed("name") {
+			name, _ := cmd.Flags().GetString("name")
+			if strings.TrimSpace(name) == "" {
+				output.Error("--name cannot be empty", plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["name"] = name
+		}
+		if cmd.Flags().Changed("color") {
+			colorValue, _ := cmd.Flags().GetString("color")
+			if strings.TrimSpace(colorValue) == "" {
+				output.Error("--color cannot be empty", plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["color"] = colorValue
+		}
+		if cmd.Flags().Changed("description") {
+			description, _ := cmd.Flags().GetString("description")
+			if strings.TrimSpace(description) == "" {
+				input["description"] = nil
+			} else {
+				input["description"] = description
+			}
+		}
+
+		if len(input) == 0 {
+			output.Error("No updates specified. Use --name, --color, or --description.", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+		updated, err := client.UpdateWorkflowState(context.Background(), stateID, input)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to update workflow status: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(updated)
+		} else if plaintext {
+			fmt.Printf("Updated workflow status %s (%s)\n", updated.Name, updated.ID)
+		} else {
+			fmt.Printf("%s Updated workflow status %s (%s)\n",
+				color.New(color.FgGreen).Sprint("✓"),
+				color.New(color.FgCyan, color.Bold).Sprint(updated.Name),
+				updated.ID)
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(teamCmd)
 	teamCmd.AddCommand(teamListCmd)
 	teamCmd.AddCommand(teamGetCmd)
 	teamCmd.AddCommand(teamMembersCmd)
+	teamCmd.AddCommand(teamStatesCmd)
+	teamCmd.AddCommand(teamStateUpdateCmd)
 
 	// List command flags
 	teamListCmd.Flags().IntP("limit", "l", 50, "Maximum number of teams to return")
 	teamListCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
+
+	// State update flags
+	teamStateUpdateCmd.Flags().String("name", "", "New name for the workflow status")
+	teamStateUpdateCmd.Flags().String("color", "", "New color for the workflow status (hex)")
+	teamStateUpdateCmd.Flags().String("description", "", "New description (empty string clears)")
 }

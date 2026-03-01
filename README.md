@@ -10,7 +10,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
   - cycles, labels, delegation, projects/milestones, parent/sub-issue links
   - due dates, attachments, comments, and rich issue detail output
 - **Projects**: list/get/create/update/delete/archive.
-- **Teams**: list/get/members.
+- **Teams**: list/get/members/statuses/status-update.
 - **Users**: list/get/me.
 - **Labels**: list/get/create/update/delete.
 - **Comments**: list/get/create/update/delete.
@@ -203,6 +203,12 @@ linctl team get ENG
 
 # List team members
 linctl team members ENG
+
+# List workflow statuses for a team
+linctl team statuses ENG
+
+# Update a workflow status
+linctl team status-update STATE-ID --name "Ready" --color "#abc"
 ```
 
 ### 5. User Management
@@ -379,8 +385,20 @@ linctl team get DESIGN      # Shows Design team details
 # List team members with roles and status
 linctl team members <team-key>
 
+# List workflow statuses (Backlog, Todo, In Progress, etc.)
+linctl team statuses <team-key>
+
+# Update a workflow status
+linctl team status-update <state-id> [flags]
+# Key flags:
+  --name string            New name for the status
+  --color string           New color (hex)
+  --description string     New description (empty string clears)
+
 # Examples:
 linctl team members ENG     # Lists all Engineering team members
+linctl team statuses ENG    # Lists workflow statuses for Engineering
+linctl team status-update abc123 --name "Ready" --color "#00ff00"
 ```
 
 ### Project Commands

@@ -46,7 +46,7 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 
 - Issues: `linctl issue ...`
 - Projects: `linctl project ...`
-- Teams: `linctl team ...`
+- Teams: `linctl team ...` (includes `statuses` and `status-update`)
 - Users: `linctl user ...` and `linctl whoami`
 - Comments: `linctl comment ...`
 - Labels: `linctl label ...`
@@ -70,6 +70,9 @@ linctl project list --newer-than all_time --json
 
 # Team labels for resolution/validation
 linctl label list --team <TEAM_KEY> --json
+
+# Team workflow statuses
+linctl team statuses <TEAM_KEY> --json
 
 # Agent session status for an issue
 linctl agent <ISSUE_ID> --json
@@ -101,6 +104,9 @@ linctl comment create LIN-123 --body "Implemented and verified locally."
 linctl comment get <COMMENT_ID>
 linctl comment update <COMMENT_ID> --body "Updated note"
 linctl comment delete <COMMENT_ID>
+
+# Update a workflow status
+linctl team status-update <STATE_ID> --name "Ready" --color "#00ff00"
 
 # Mention delegated/active agent with message
 linctl agent mention LIN-123 "Please pick this up."
