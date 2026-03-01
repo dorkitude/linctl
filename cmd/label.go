@@ -186,6 +186,7 @@ var labelCreateCmd = &cobra.Command{
 		colorValue, _ := cmd.Flags().GetString("color")
 		description, _ := cmd.Flags().GetString("description")
 		parentValue, _ := cmd.Flags().GetString("parent")
+		isGroup, _ := cmd.Flags().GetBool("is-group")
 
 		if strings.TrimSpace(name) == "" {
 			output.Error("--name is required", plaintext, jsonOut)
@@ -206,6 +207,10 @@ var labelCreateCmd = &cobra.Command{
 		input := map[string]interface{}{
 			"name":   name,
 			"teamId": team.ID,
+		}
+
+		if isGroup {
+			input["isGroup"] = true
 		}
 
 		if colorValue != "" {
@@ -417,6 +422,7 @@ func init() {
 	labelCreateCmd.Flags().String("color", "", "Label color hex (e.g. #ff0000)")
 	labelCreateCmd.Flags().String("description", "", "Label description")
 	labelCreateCmd.Flags().String("parent", "", "Parent label name or ID")
+	labelCreateCmd.Flags().Bool("is-group", false, "Create as a group label (for organizing child labels)")
 	_ = labelCreateCmd.MarkFlagRequired("team")
 	_ = labelCreateCmd.MarkFlagRequired("name")
 
