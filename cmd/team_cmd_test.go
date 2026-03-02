@@ -75,3 +75,40 @@ func TestTeamStateUpdateCmdSetsInput(t *testing.T) {
 		t.Fatalf("expected color #abc, got %q", sawColor)
 	}
 }
+
+func TestTeamStateListCmdFetchesStatesForTeamKey(t *testing.T) {
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	t.Setenv("LINCTL_API_KEY", "test-key")
+	viper.Set("plaintext", true)
+	viper.Set("json", false)
+
+	var sawTeamKey string
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var gqlReq gqlCommandTestRequest
+		if err := json.NewDecoder(req.Body).Decode(&gqlReq); err != nil {
+			t.Fatalf("decode GraphQL request: %v", err)
+		}
+
+		if !strings.Contains(gqlReq.Query, "query TeamStates(") {
+			t.Fatalf("expected TeamStates query, got: %s", gqlReq.Query)
+		}
+
+		if v, ok := gqlReq.Variables["key"].(string); ok {
+			sawTeamKey = v
+		}
+
+		body := `{"data":{"team":{"states":{"nodes":[{"id":"s1","name":"Todo","type":"unstarted","color":"#aaa","description":"","position":1}]}}}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	})
+
+	teamStateListCmd.Run(teamStateListCmd, []string{"ENG"})
+
+	if sawTeamKey != "ENG" {
+		t.Fatalf("expected team key ENG, got %q", sawTeamKey)
+	}
+}
