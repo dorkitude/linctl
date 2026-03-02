@@ -286,11 +286,17 @@ var teamMembersCmd = &cobra.Command{
 	},
 }
 
-var teamStatesCmd = &cobra.Command{
-	Use:     "statuses TEAM-KEY",
-	Aliases: []string{"states"},
-	Short:   "List workflow statuses for a team",
-	Long:    `List all workflow statuses (e.g. Backlog, Todo, In Progress, Done) for a specific team.`,
+var teamStateCmd = &cobra.Command{
+	Use:   "state",
+	Short: "Manage workflow states for a team",
+	Long:  `Manage workflow states (e.g. Backlog, Todo, In Progress, Done) for a team.`,
+}
+
+var teamStateListCmd = &cobra.Command{
+	Use:     "list TEAM-KEY",
+	Aliases: []string{"ls"},
+	Short:   "List workflow states for a team",
+	Long:    `List all workflow states (e.g. Backlog, Todo, In Progress, Done) for a specific team.`,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
@@ -307,7 +313,7 @@ var teamStatesCmd = &cobra.Command{
 
 		states, err := client.GetTeamStates(context.Background(), teamKey)
 		if err != nil {
-			output.Error(fmt.Sprintf("Failed to get workflow statuses: %v", err), plaintext, jsonOut)
+			output.Error(fmt.Sprintf("Failed to get workflow states: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
@@ -337,7 +343,7 @@ var teamStatesCmd = &cobra.Command{
 			}, plaintext, jsonOut)
 
 			if !plaintext && !jsonOut {
-				fmt.Printf("\n%s %d workflow statuses in team %s\n",
+				fmt.Printf("\n%s %d workflow states in team %s\n",
 					color.New(color.FgGreen).Sprint("✓"),
 					len(states),
 					color.New(color.FgCyan).Sprint(teamKey))
@@ -347,10 +353,9 @@ var teamStatesCmd = &cobra.Command{
 }
 
 var teamStateUpdateCmd = &cobra.Command{
-	Use:     "status-update STATE-ID",
-	Aliases: []string{"state-update"},
-	Short:   "Update a workflow status",
-	Long:    `Update an existing workflow status's name, color, or description.`,
+	Use:     "update STATE-ID",
+	Short:   "Update a workflow state",
+	Long:    `Update an existing workflow state's name, color, or description.`,
 	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
@@ -398,16 +403,16 @@ var teamStateUpdateCmd = &cobra.Command{
 		client := api.NewClient(authHeader)
 		updated, err := client.UpdateWorkflowState(context.Background(), stateID, input)
 		if err != nil {
-			output.Error(fmt.Sprintf("Failed to update workflow status: %v", err), plaintext, jsonOut)
+			output.Error(fmt.Sprintf("Failed to update workflow state: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
 
 		if jsonOut {
 			output.JSON(updated)
 		} else if plaintext {
-			fmt.Printf("Updated workflow status %s (%s)\n", updated.Name, updated.ID)
+			fmt.Printf("Updated workflow state %s (%s)\n", updated.Name, updated.ID)
 		} else {
-			fmt.Printf("%s Updated workflow status %s (%s)\n",
+			fmt.Printf("%s Updated workflow state %s (%s)\n",
 				color.New(color.FgGreen).Sprint("✓"),
 				color.New(color.FgCyan, color.Bold).Sprint(updated.Name),
 				updated.ID)
@@ -420,15 +425,16 @@ func init() {
 	teamCmd.AddCommand(teamListCmd)
 	teamCmd.AddCommand(teamGetCmd)
 	teamCmd.AddCommand(teamMembersCmd)
-	teamCmd.AddCommand(teamStatesCmd)
-	teamCmd.AddCommand(teamStateUpdateCmd)
+	teamCmd.AddCommand(teamStateCmd)
+	teamStateCmd.AddCommand(teamStateListCmd)
+	teamStateCmd.AddCommand(teamStateUpdateCmd)
 
 	// List command flags
 	teamListCmd.Flags().IntP("limit", "l", 50, "Maximum number of teams to return")
 	teamListCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
 
 	// State update flags
-	teamStateUpdateCmd.Flags().String("name", "", "New name for the workflow status")
-	teamStateUpdateCmd.Flags().String("color", "", "New color for the workflow status (hex)")
+	teamStateUpdateCmd.Flags().String("name", "", "New name for the workflow state")
+	teamStateUpdateCmd.Flags().String("color", "", "New color for the workflow state (hex)")
 	teamStateUpdateCmd.Flags().String("description", "", "New description (empty string clears)")
 }

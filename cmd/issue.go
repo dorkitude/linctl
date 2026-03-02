@@ -992,6 +992,7 @@ Examples:
   linctl issue create --title "Fix bug" --team ENG
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform"
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
+  linctl issue create --title "Fix bug" --team ENG --state "In Progress"
   linctl issue create --title "Fix bug" --team ENG --delegate agent-user
   linctl issue create --title "Fix bug" --team ENG --labels bug,urgent`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1055,6 +1056,31 @@ Examples:
 				os.Exit(1)
 			}
 			input["assigneeId"] = viewer.ID
+		}
+
+		if cmd.Flags().Changed("state") {
+			stateName, _ := cmd.Flags().GetString("state")
+			states, err := client.GetTeamStates(context.Background(), teamKey)
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to get team states: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			var stateID string
+			for _, state := range states {
+				if strings.EqualFold(state.Name, stateName) {
+					stateID = state.ID
+					break
+				}
+			}
+			if stateID == "" {
+				var stateNames []string
+				for _, state := range states {
+					stateNames = append(stateNames, state.Name)
+				}
+				output.Error(fmt.Sprintf("State '%s' not found. Available states: %s", stateName, strings.Join(stateNames, ", ")), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			input["stateId"] = stateID
 		}
 
 		if cmd.Flags().Changed("delegate") && !isUnsetValue(delegateIdentifier) {
@@ -1810,6 +1836,7 @@ func init() {
 	issueCreateCmd.Flags().StringP("team", "t", "", "Team key (required)")
 	issueCreateCmd.Flags().Int("priority", 3, "Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)")
 	issueCreateCmd.Flags().BoolP("assign-me", "m", false, "Assign to yourself")
+	issueCreateCmd.Flags().StringP("state", "s", "", "State name (e.g., 'Todo', 'In Progress')")
 	issueCreateCmd.Flags().String("delegate", "", "Delegate to user/agent (email, name, or displayName)")
 	issueCreateCmd.Flags().String("project", "", "Project name or ID to assign the issue to")
 	issueCreateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (requires --project)")
