@@ -8,6 +8,7 @@ Ship safe, small, tested changes to `linctl` with docs that match behavior.
 - Prefer `rg`/`go test`/existing scripts; do not invent parallel tooling.
 - Never rewrite user-authored history (`reset --hard`, force-push) unless explicitly requested.
 - If behavior changes, update docs in the same PR (`README.md`, `SKILL.md`,  as needed).
+- If a change updates release versioning, do not consider it complete until Homebrew tap bump status is verified.
 
 ## Quality Bar
 - Run: `go test ./...` before finalizing code changes.
@@ -29,6 +30,7 @@ Ship safe, small, tested changes to `linctl` with docs that match behavior.
 ## Release + Homebrew (Owners Only)
 - Owners cut releases from `master` using semver tags `vX.Y.Z`.
 - Required for auto Homebrew bump: repo secret `HOMEBREW_TAP_TOKEN` (write access to `dorkitude/homebrew-linctl`).
+- Version bump policy: release/version bumps must include Homebrew verification in the same workstream (auto workflow success or merged manual tap bump PR).
 - Flow:
   1. `git push origin master`
   2. `git tag -a vX.Y.Z -m "vX.Y.Z: <summary>" && git push origin vX.Y.Z`
