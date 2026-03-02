@@ -10,7 +10,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
   - cycles, labels, delegation, projects/milestones, parent/sub-issue links
   - due dates, attachments, comments, and rich issue detail output
 - **Projects**: list/get/create/update/delete/archive.
-- **Teams**: list/get/members/states/state-update.
+- **Teams**: list/get/members/state (list/update).
 - **Users**: list/get/me.
 - **Labels**: list/get/create/update/delete.
 - **Comments**: list/get/create/update/delete.
@@ -207,10 +207,10 @@ linctl team get ENG
 linctl team members ENG
 
 # List workflow states for a team
-linctl team states ENG
+linctl team state list ENG
 
 # Update a workflow state
-linctl team state-update STATE-ID --name "Ready" --color "#abc"
+linctl team state update STATE-ID --name "Ready" --color "#abc"
 ```
 
 ### 5. User Management
@@ -419,10 +419,10 @@ linctl team get DESIGN      # Shows Design team details
 linctl team members <team-key>
 
 # List workflow states (Backlog, Todo, In Progress, etc.)
-linctl team states <team-key>
+linctl team state list <team-key>
 
 # Update a workflow state
-linctl team state-update <state-id> [flags]
+linctl team state update <state-id> [flags]
 # Key flags:
   --name string            New name for the state
   --color string           New color (hex)
@@ -430,8 +430,8 @@ linctl team state-update <state-id> [flags]
 
 # Examples:
 linctl team members ENG     # Lists all Engineering team members
-linctl team states ENG      # Lists workflow states for Engineering
-linctl team state-update abc123 --name "Ready" --color "#00ff00"
+linctl team state list ENG  # Lists workflow states for Engineering
+linctl team state update abc123 --name "Ready" --color "#00ff00"
 ```
 
 ### Project Commands

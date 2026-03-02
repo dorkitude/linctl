@@ -286,8 +286,15 @@ var teamMembersCmd = &cobra.Command{
 	},
 }
 
-var teamStatesCmd = &cobra.Command{
-	Use:     "states TEAM-KEY",
+var teamStateCmd = &cobra.Command{
+	Use:   "state",
+	Short: "Manage workflow states for a team",
+	Long:  `Manage workflow states (e.g. Backlog, Todo, In Progress, Done) for a team.`,
+}
+
+var teamStateListCmd = &cobra.Command{
+	Use:     "list TEAM-KEY",
+	Aliases: []string{"ls"},
 	Short:   "List workflow states for a team",
 	Long:    `List all workflow states (e.g. Backlog, Todo, In Progress, Done) for a specific team.`,
 	Args:    cobra.ExactArgs(1),
@@ -346,7 +353,7 @@ var teamStatesCmd = &cobra.Command{
 }
 
 var teamStateUpdateCmd = &cobra.Command{
-	Use:     "state-update STATE-ID",
+	Use:     "update STATE-ID",
 	Short:   "Update a workflow state",
 	Long:    `Update an existing workflow state's name, color, or description.`,
 	Args:    cobra.ExactArgs(1),
@@ -418,8 +425,9 @@ func init() {
 	teamCmd.AddCommand(teamListCmd)
 	teamCmd.AddCommand(teamGetCmd)
 	teamCmd.AddCommand(teamMembersCmd)
-	teamCmd.AddCommand(teamStatesCmd)
-	teamCmd.AddCommand(teamStateUpdateCmd)
+	teamCmd.AddCommand(teamStateCmd)
+	teamStateCmd.AddCommand(teamStateListCmd)
+	teamStateCmd.AddCommand(teamStateUpdateCmd)
 
 	// List command flags
 	teamListCmd.Flags().IntP("limit", "l", 50, "Maximum number of teams to return")
