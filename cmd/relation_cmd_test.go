@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 
@@ -171,8 +172,6 @@ func TestRelationListShowsRelations(t *testing.T) {
 	viper.Set("plaintext", true)
 	viper.Set("json", false)
 
-	var sawQuery bool
-
 	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
 		var gqlReq gqlCommandTestRequest
 		if err := json.NewDecoder(req.Body).Decode(&gqlReq); err != nil {
@@ -183,15 +182,15 @@ func TestRelationListShowsRelations(t *testing.T) {
 			t.Fatalf("expected IssueRelations query, got: %s", gqlReq.Query)
 		}
 
-		sawQuery = true
-
-		// Return one forward relation and one inverse relation
+		// Return one forward "blocks" relation (this issue is blocked by LIN-200)
+		// and one inverse "blocks" relation (this issue blocks LIN-300).
+		// The labels should differ: "blocked by" vs "blocks".
 		body := `{"data":{"issue":{
 			"relations":{"nodes":[
-				{"id":"rel-1","type":"blocks","relatedIssue":{"id":"uuid-200","identifier":"LIN-200","title":"Blocked task"}}
+				{"id":"rel-1","type":"blocks","issue":{"id":"uuid-100","identifier":"LIN-100","title":"This issue"},"relatedIssue":{"id":"uuid-200","identifier":"LIN-200","title":"Blocker task"}}
 			]},
 			"inverseRelations":{"nodes":[
-				{"id":"rel-2","type":"related","issue":{"id":"uuid-300","identifier":"LIN-300","title":"Related task"}}
+				{"id":"rel-2","type":"blocks","issue":{"id":"uuid-300","identifier":"LIN-300","title":"Blocked task"},"relatedIssue":{"id":"uuid-100","identifier":"LIN-100","title":"This issue"}}
 			]}
 		}}}`
 		return &http.Response{
@@ -201,10 +200,34 @@ func TestRelationListShowsRelations(t *testing.T) {
 		}, nil
 	})
 
+	// Capture stdout to verify direction-aware labels
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
 	issueRelationListCmd.Run(issueRelationListCmd, []string{"LIN-100"})
 
-	if !sawQuery {
-		t.Fatal("expected IssueRelations query to be sent")
+	w.Close()
+	var buf strings.Builder
+	io.Copy(&buf, r)
+	os.Stdout = oldStdout
+	got := buf.String()
+
+	// Forward "blocks" relation should display as "blocked by"
+	if !strings.Contains(got, "blocked by") {
+		t.Fatalf("expected forward blocks relation labeled 'blocked by', got:\n%s", got)
+	}
+	// Inverse "blocks" relation should display as "blocks" (not "blocked by")
+	lines := strings.Split(got, "\n")
+	var secondLabel string
+	for _, line := range lines {
+		if strings.Contains(line, "rel-2") {
+			secondLabel = line
+			break
+		}
+	}
+	if !strings.Contains(secondLabel, "blocks") || strings.Contains(secondLabel, "blocked by") {
+		t.Fatalf("expected inverse blocks relation labeled 'blocks', got:\n%s", got)
 	}
 }
 
@@ -245,17 +268,30 @@ func TestRelationRemoveSendsDeleteMutation(t *testing.T) {
 }
 
 func TestRelationTypeLabel(t *testing.T) {
-	cases := map[string]string{
+	// Forward (non-inverse) labels
+	forwardCases := map[string]string{
 		"blocks":    "blocked by",
 		"duplicate": "duplicate of",
 		"related":   "related to",
 		"similar":   "similar to",
 		"unknown":   "unknown",
 	}
+	for input, want := range forwardCases {
+		if got := relationTypeLabel(input, false); got != want {
+			t.Fatalf("relationTypeLabel(%q, false) = %q, want %q", input, got, want)
+		}
+	}
 
-	for input, want := range cases {
-		if got := relationTypeLabel(input); got != want {
-			t.Fatalf("relationTypeLabel(%q) = %q, want %q", input, got, want)
+	// Inverse labels — direction-sensitive types should flip
+	inverseCases := map[string]string{
+		"blocks":    "blocks",
+		"duplicate": "has duplicate",
+		"related":   "related to",
+		"similar":   "similar to",
+	}
+	for input, want := range inverseCases {
+		if got := relationTypeLabel(input, true); got != want {
+			t.Fatalf("relationTypeLabel(%q, true) = %q, want %q", input, got, want)
 		}
 	}
 }
