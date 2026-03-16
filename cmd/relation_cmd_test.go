@@ -12,7 +12,7 @@ import (
 
 func resetRelationAddFlags(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"blocks", "blocked-by", "related", "duplicate"} {
+	for _, name := range []string{"blocks", "blocked-by", "related", "duplicate", "similar"} {
 		flag := issueRelationAddCmd.Flags().Lookup(name)
 		if flag == nil {
 			t.Fatalf("missing flag %q", name)
@@ -169,6 +169,7 @@ func TestRelationTypeLabel(t *testing.T) {
 		"blocks":    "blocked by",
 		"duplicate": "duplicate of",
 		"related":   "related to",
+		"similar":   "similar to",
 		"unknown":   "unknown",
 	}
 
