@@ -14,14 +14,16 @@ import (
 	"github.com/spf13/viper"
 )
 
-// validRelationTypes lists the valid relation types accepted by the Linear API.
-var validRelationTypes = []string{"blocks", "blocked-by", "duplicate", "related"}
+// apiRelationTypes lists the relation types in the Linear API's IssueRelationType enum.
+// Note: "blocked-by" is NOT an API type — it's a CLI convenience that maps to "blocks"
+// with swapped issue IDs. See the --blocked-by flag on issueRelationAddCmd.
+var apiRelationTypes = []string{"blocks", "duplicate", "related", "similar"}
 
 // issueRelationCmd is the parent command for issue relation management.
 var issueRelationCmd = &cobra.Command{
 	Use:   "relation",
 	Short: "Manage issue relations",
-	Long: `Manage relations between Linear issues (blocking, blocked-by, related, duplicate).
+	Long: `Manage relations between Linear issues (blocking, blocked-by, related, duplicate, similar).
 
 Examples:
   linctl issue relation list LIN-123
@@ -29,6 +31,7 @@ Examples:
   linctl issue relation add LIN-123 --blocked-by LIN-456
   linctl issue relation add LIN-123 --related LIN-456
   linctl issue relation add LIN-123 --duplicate LIN-456
+  linctl issue relation add LIN-123 --similar LIN-456
   linctl issue relation remove RELATION-ID`,
 }
 
@@ -36,7 +39,7 @@ var issueRelationListCmd = &cobra.Command{
 	Use:     "list ISSUE-ID",
 	Aliases: []string{"ls"},
 	Short:   "List relations for an issue",
-	Long: `List all relations (blocking, blocked-by, related, duplicate) for an issue.
+	Long: `List all relations (blocking, blocked-by, related, duplicate, similar) for an issue.
 
 Examples:
   linctl issue relation list LIN-123
@@ -109,12 +112,14 @@ Relation types:
   --blocked-by ISSUE-ID  This issue is blocked by the specified issue
   --related ISSUE-ID     Mark issues as related
   --duplicate ISSUE-ID   Mark this issue as a duplicate of the specified issue
+  --similar ISSUE-ID     Mark issues as similar
 
 Examples:
   linctl issue relation add LIN-123 --blocks LIN-456
   linctl issue relation add LIN-123 --blocked-by LIN-456
   linctl issue relation add LIN-123 --related LIN-456
-  linctl issue relation add LIN-123 --duplicate LIN-456`,
+  linctl issue relation add LIN-123 --duplicate LIN-456
+  linctl issue relation add LIN-123 --similar LIN-456`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
@@ -132,6 +137,7 @@ Examples:
 		blockedBy, _ := cmd.Flags().GetString("blocked-by")
 		related, _ := cmd.Flags().GetString("related")
 		duplicate, _ := cmd.Flags().GetString("duplicate")
+		similar, _ := cmd.Flags().GetString("similar")
 
 		var relatedIssueID string
 		var relationType string
@@ -158,9 +164,14 @@ Examples:
 			relatedIssueID = duplicate
 			relationType = "duplicate"
 		}
+		if similar != "" {
+			flagCount++
+			relatedIssueID = similar
+			relationType = "similar"
+		}
 
 		if flagCount == 0 {
-			output.Error("Must specify one of: --blocks, --blocked-by, --related, --duplicate", plaintext, jsonOut)
+			output.Error("Must specify one of: --blocks, --blocked-by, --related, --duplicate, --similar", plaintext, jsonOut)
 			os.Exit(1)
 		}
 		if flagCount > 1 {
@@ -218,6 +229,10 @@ Examples:
 			apiIssueID = issue.ID
 			apiRelatedIssueID = relatedIssue.ID
 			apiType = "duplicate"
+		case "similar":
+			apiIssueID = issue.ID
+			apiRelatedIssueID = relatedIssue.ID
+			apiType = "similar"
 		}
 
 		relation, err := client.CreateIssueRelation(context.Background(), apiIssueID, apiRelatedIssueID, apiType)
@@ -317,6 +332,8 @@ func relationTypeLabel(t string) string {
 		return "duplicate of"
 	case "related":
 		return "related to"
+	case "similar":
+		return "similar to"
 	default:
 		return t
 	}
@@ -333,4 +350,5 @@ func init() {
 	issueRelationAddCmd.Flags().String("blocked-by", "", "Issue that blocks this issue (issue identifier)")
 	issueRelationAddCmd.Flags().String("related", "", "Related issue (issue identifier)")
 	issueRelationAddCmd.Flags().String("duplicate", "", "Issue that this is a duplicate of (issue identifier)")
+	issueRelationAddCmd.Flags().String("similar", "", "Issue that is similar to this issue (issue identifier)")
 }
