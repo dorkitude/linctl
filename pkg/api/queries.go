@@ -2401,3 +2401,150 @@ func (c *Client) CreateAttachment(ctx context.Context, input map[string]interfac
 
 	return &response.AttachmentCreate.Attachment, nil
 }
+
+// CreateIssueRelation creates a relation between two issues.
+// issueID is the issue to add the relation to.
+// relatedIssueID is the other issue in the relation.
+// relationType is one of: "blocks", "duplicate", "related".
+// For "blocks": issueID is blocked by relatedIssueID.
+func (c *Client) CreateIssueRelation(ctx context.Context, issueID, relatedIssueID, relationType string) (*IssueRelation, error) {
+	query := `
+		mutation IssueRelationCreate($input: IssueRelationCreateInput!) {
+			issueRelationCreate(input: $input) {
+				success
+				issueRelation {
+					id
+					type
+					issue {
+						id
+						identifier
+						title
+					}
+					relatedIssue {
+						id
+						identifier
+						title
+					}
+				}
+			}
+		}
+	`
+
+	input := map[string]interface{}{
+		"issueId":        issueID,
+		"relatedIssueId": relatedIssueID,
+		"type":           relationType,
+	}
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		IssueRelationCreate struct {
+			Success       bool          `json:"success"`
+			IssueRelation IssueRelation `json:"issueRelation"`
+		} `json:"issueRelationCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	if !response.IssueRelationCreate.Success {
+		return nil, fmt.Errorf("failed to create issue relation")
+	}
+
+	return &response.IssueRelationCreate.IssueRelation, nil
+}
+
+// DeleteIssueRelation removes a relation between two issues by relation ID.
+func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) error {
+	query := `
+		mutation IssueRelationDelete($id: String!) {
+			issueRelationDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": relationID,
+	}
+
+	var response struct {
+		IssueRelationDelete struct {
+			Success bool `json:"success"`
+		} `json:"issueRelationDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+
+	if !response.IssueRelationDelete.Success {
+		return fmt.Errorf("failed to delete issue relation")
+	}
+
+	return nil
+}
+
+// GetIssueRelations returns all relations for a given issue.
+func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]IssueRelation, error) {
+	query := `
+		query IssueRelations($id: String!) {
+			issue(id: $id) {
+				relations {
+					nodes {
+						id
+						type
+						relatedIssue {
+							id
+							identifier
+							title
+						}
+					}
+				}
+				inverseRelations {
+					nodes {
+						id
+						type
+						issue {
+							id
+							identifier
+							title
+						}
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": issueID,
+	}
+
+	var response struct {
+		Issue struct {
+			Relations struct {
+				Nodes []IssueRelation `json:"nodes"`
+			} `json:"relations"`
+			InverseRelations struct {
+				Nodes []IssueRelation `json:"nodes"`
+			} `json:"inverseRelations"`
+		} `json:"issue"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	// Combine both directions into a single list
+	all := make([]IssueRelation, 0, len(response.Issue.Relations.Nodes)+len(response.Issue.InverseRelations.Nodes))
+	all = append(all, response.Issue.Relations.Nodes...)
+	all = append(all, response.Issue.InverseRelations.Nodes...)
+	return all, nil
+}
