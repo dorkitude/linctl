@@ -261,6 +261,7 @@ type IssueRelation struct {
 	Type         string `json:"type"`
 	Issue        *Issue `json:"issue"`
 	RelatedIssue *Issue `json:"relatedIssue"`
+	Inverse      bool   `json:"inverse"`
 }
 
 type IssueHistory struct {
@@ -2500,6 +2501,11 @@ func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]Issue
 					nodes {
 						id
 						type
+						issue {
+							id
+							identifier
+							title
+						}
 						relatedIssue {
 							id
 							identifier
@@ -2512,6 +2518,11 @@ func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]Issue
 						id
 						type
 						issue {
+							id
+							identifier
+							title
+						}
+						relatedIssue {
 							id
 							identifier
 							title
@@ -2542,9 +2553,13 @@ func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]Issue
 		return nil, err
 	}
 
-	// Combine both directions into a single list
+	// Combine both directions, tagging inverse relations so callers
+	// can display direction-aware labels (e.g. "blocks" vs "blocked by").
 	all := make([]IssueRelation, 0, len(response.Issue.Relations.Nodes)+len(response.Issue.InverseRelations.Nodes))
 	all = append(all, response.Issue.Relations.Nodes...)
+	for i := range response.Issue.InverseRelations.Nodes {
+		response.Issue.InverseRelations.Nodes[i].Inverse = true
+	}
 	all = append(all, response.Issue.InverseRelations.Nodes...)
 	return all, nil
 }

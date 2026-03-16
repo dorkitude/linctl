@@ -77,7 +77,7 @@ Examples:
 		if plaintext {
 			for _, rel := range relations {
 				other := relationOtherIssue(&rel)
-				fmt.Printf("%s\t%s\t%s\t%s\n", rel.ID, rel.Type, other.Identifier, other.Title)
+				fmt.Printf("%s\t%s\t%s\t%s\n", rel.ID, relationTypeLabel(rel.Type, rel.Inverse), other.Identifier, other.Title)
 			}
 			return
 		}
@@ -90,7 +90,7 @@ Examples:
 
 		for _, rel := range relations {
 			other := relationOtherIssue(&rel)
-			typeLabel := relationTypeLabel(rel.Type)
+			typeLabel := relationTypeLabel(rel.Type, rel.Inverse)
 			fmt.Printf("  %s %s %s\n",
 				color.New(color.FgYellow).Sprint(typeLabel),
 				color.New(color.FgCyan, color.Bold).Sprint(other.Identifier),
@@ -324,11 +324,19 @@ func relationOtherIssue(rel *api.IssueRelation) *api.Issue {
 }
 
 // relationTypeLabel returns a human-readable label for a relation type.
-func relationTypeLabel(t string) string {
+// When inverse is true, the label is flipped to reflect the opposite direction
+// (e.g. "blocks" instead of "blocked by").
+func relationTypeLabel(t string, inverse bool) string {
 	switch strings.ToLower(t) {
 	case "blocks":
+		if inverse {
+			return "blocks"
+		}
 		return "blocked by"
 	case "duplicate":
+		if inverse {
+			return "has duplicate"
+		}
 		return "duplicate of"
 	case "related":
 		return "related to"
