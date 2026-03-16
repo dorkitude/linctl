@@ -9,6 +9,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
 - **Issues**: list/search/get/create/update/assign with support for:
   - cycles, labels, delegation, projects/milestones, parent/sub-issue links
   - due dates, attachments, comments, and rich issue detail output
+  - issue relations (blocks, blocked-by, related, duplicate, similar)
 - **Projects**: list/get/create/update/delete/archive.
 - **Teams**: list/get/members/state (list/update).
 - **Users**: list/get/me.
@@ -165,6 +166,16 @@ linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1 --
 linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
 linctl issue attach LIN-123 --pr 456  # Resolves repo from git remote origin
 linctl issue attach LIN-123 --url https://example.com/spec --title "Spec"
+
+# Manage issue relations (blocks, blocked-by, related, duplicate, similar)
+linctl issue relation list LIN-123
+linctl issue relation ls LIN-123 -j            # JSON output
+linctl issue relation add LIN-123 --blocks LIN-456
+linctl issue relation add LIN-123 --blocked-by LIN-456
+linctl issue relation add LIN-123 --related LIN-456
+linctl issue relation add LIN-123 --duplicate LIN-456
+linctl issue relation add LIN-123 --similar LIN-456
+linctl issue relation remove RELATION-ID        # Use ID from relation list
 ```
 
 ### 3. Project Management
@@ -385,6 +396,33 @@ linctl issue attach <issue-id> [flags]
   --subtitle string        Attachment subtitle
   --icon-url string        Attachment icon URL
 
+```
+
+### Issue Relation Commands
+```bash
+# List all relations for an issue
+linctl issue relation list <issue-id>
+linctl issue relation ls <issue-id>    # Alias
+
+# Add a relation between two issues
+linctl issue relation add <issue-id> [flags]
+linctl issue relation create <issue-id> [flags]  # Alias
+# Flags (exactly one required):
+  --blocks <issue-id>       This issue blocks the specified issue
+  --blocked-by <issue-id>   This issue is blocked by the specified issue
+  --related <issue-id>      Mark issues as related
+  --duplicate <issue-id>    Mark this issue as a duplicate
+  --similar <issue-id>      Mark issues as similar
+
+# Remove a relation by its ID (from relation list output)
+linctl issue relation remove <relation-id>
+linctl issue relation rm <relation-id>     # Alias
+linctl issue relation delete <relation-id> # Alias
+
+# Examples:
+linctl issue relation add LIN-123 --blocks LIN-456      # LIN-123 blocks LIN-456
+linctl issue relation add LIN-123 --blocked-by LIN-456   # LIN-123 is blocked by LIN-456
+linctl issue relation list LIN-123 -j                    # JSON output for scripting
 ```
 
 ### Agent Commands
