@@ -142,6 +142,12 @@ if [ -n "$issue_id" ]; then
     echo -e "\n${YELLOW}Testing comment commands...${NC}"
     run_test "comment list" "go run main.go comment list $issue_id"
     run_test "comment list (plaintext)" "go run main.go comment list $issue_id -p"
+
+    # Test issue relation list for this issue
+    echo -e "\n${YELLOW}Testing issue relation commands...${NC}"
+    run_test "issue relation list" "go run main.go issue relation list $issue_id"
+    run_test "issue relation list (plaintext)" "go run main.go issue relation list $issue_id -p"
+    run_test "issue relation list (json)" "go run main.go issue relation list $issue_id -j"
 fi
 
 # Test help commands
@@ -150,6 +156,8 @@ run_test "help" "go run main.go --help" "Usage:"
 run_test "issue help" "go run main.go issue --help" "Available Commands:"
 run_test "issue update help" "go run main.go issue update --help" "update"
 run_test "issue update --parent flag" "go run main.go issue update --help" "parent"
+run_test "issue relation help" "go run main.go issue relation --help" "Manage relations between Linear issues"
+run_test "issue relation add help" "go run main.go issue relation add --help" "blocks"
 run_test "project help" "go run main.go project --help" "Available Commands:"
 run_test "team help" "go run main.go team --help" "Available Commands:"
 run_test "user help" "go run main.go user --help" "Available Commands:"
