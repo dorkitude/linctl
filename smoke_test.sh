@@ -159,6 +159,7 @@ run_test "issue update --parent flag" "go run main.go issue update --help" "pare
 run_test "issue relation help" "go run main.go issue relation --help" "Manage relations between Linear issues"
 run_test "issue relation add help" "go run main.go issue relation add --help" "blocks"
 run_test "project help" "go run main.go project --help" "Available Commands:"
+run_test "project update --content flag" "go run main.go project update --help" "content"
 run_test "team help" "go run main.go team --help" "Available Commands:"
 run_test "user help" "go run main.go user --help" "Available Commands:"
 

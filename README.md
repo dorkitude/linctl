@@ -511,6 +511,7 @@ linctl project update <project-id> [flags]
   --start-date           YYYY-MM-DD or empty to clear
   --target-date          YYYY-MM-DD or empty to clear
   --color                Hex color
+  --content              Project document body content
 
 # Delete/archive project
 linctl project delete <project-id> [flags]
