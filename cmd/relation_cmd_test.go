@@ -164,6 +164,86 @@ func TestRelationAddBlockedBySendsCorrectMutation(t *testing.T) {
 	}
 }
 
+func TestRelationListShowsRelations(t *testing.T) {
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	t.Setenv("LINCTL_API_KEY", "test-key")
+	viper.Set("plaintext", true)
+	viper.Set("json", false)
+
+	var sawQuery bool
+
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var gqlReq gqlCommandTestRequest
+		if err := json.NewDecoder(req.Body).Decode(&gqlReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+
+		if !strings.Contains(gqlReq.Query, "IssueRelations") {
+			t.Fatalf("expected IssueRelations query, got: %s", gqlReq.Query)
+		}
+
+		sawQuery = true
+
+		// Return one forward relation and one inverse relation
+		body := `{"data":{"issue":{
+			"relations":{"nodes":[
+				{"id":"rel-1","type":"blocks","relatedIssue":{"id":"uuid-200","identifier":"LIN-200","title":"Blocked task"}}
+			]},
+			"inverseRelations":{"nodes":[
+				{"id":"rel-2","type":"related","issue":{"id":"uuid-300","identifier":"LIN-300","title":"Related task"}}
+			]}
+		}}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	})
+
+	issueRelationListCmd.Run(issueRelationListCmd, []string{"LIN-100"})
+
+	if !sawQuery {
+		t.Fatal("expected IssueRelations query to be sent")
+	}
+}
+
+func TestRelationRemoveSendsDeleteMutation(t *testing.T) {
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	t.Setenv("LINCTL_API_KEY", "test-key")
+	viper.Set("plaintext", true)
+	viper.Set("json", false)
+
+	var capturedID string
+
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var gqlReq gqlCommandTestRequest
+		if err := json.NewDecoder(req.Body).Decode(&gqlReq); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+
+		if !strings.Contains(gqlReq.Query, "mutation IssueRelationDelete(") {
+			t.Fatalf("expected IssueRelationDelete mutation, got: %s", gqlReq.Query)
+		}
+
+		capturedID, _ = gqlReq.Variables["id"].(string)
+
+		body := `{"data":{"issueRelationDelete":{"success":true}}}`
+		return &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body:       io.NopCloser(strings.NewReader(body)),
+		}, nil
+	})
+
+	issueRelationRemoveCmd.Run(issueRelationRemoveCmd, []string{"rel-abc-123"})
+
+	if capturedID != "rel-abc-123" {
+		t.Fatalf("expected relation ID rel-abc-123, got %v", capturedID)
+	}
+}
+
 func TestRelationTypeLabel(t *testing.T) {
 	cases := map[string]string{
 		"blocks":    "blocked by",
