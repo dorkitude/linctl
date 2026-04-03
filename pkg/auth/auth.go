@@ -102,7 +102,7 @@ func Login(plaintext, jsonOut bool) error {
 func loginWithAPIKey(plaintext, jsonOut bool) error {
 	if !plaintext && !jsonOut {
 		fmt.Println("\n" + color.New(color.FgYellow).Sprint("📝 Personal API Key Authentication"))
-		fmt.Println("Get your API key from: https://linear.app/settings/api")
+		fmt.Println("Get your API key from: https://linear.app/<your-org>/settings/account/security")
 
 		// Get the config path to show to the user
 		configPath, _ := getConfigPath()
