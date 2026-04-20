@@ -97,6 +97,11 @@ linctl issue update LIN-123 --clear-labels
 linctl issue attach LIN-123 --pr https://github.com/org/repo/pull/123
 linctl issue attach LIN-123 --url https://example.com/spec --title "Spec"
 
+# List/download issue attachment files and uploads links
+linctl issue attachment list LIN-123 --json
+linctl issue attachment download LIN-123 --all --output-dir ./downloads
+linctl issue get LIN-123 --download-attachments --output-dir ./downloads --json
+
 # Add execution note
 linctl comment create LIN-123 --body "Implemented and verified locally."
 

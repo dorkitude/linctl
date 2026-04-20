@@ -307,6 +307,8 @@ linctl issue create|new
 linctl issue update
 linctl issue assign
 linctl issue attach
+linctl issue attachment list|ls
+linctl issue attachment download|dl
 ```
 
 ### Projects

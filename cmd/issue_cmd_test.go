@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/dorkitude/linctl/pkg/api"
 	"github.com/spf13/viper"
 )
 
@@ -81,5 +83,85 @@ func TestIssueCreateCmdStateResolvesToStateID(t *testing.T) {
 
 	if sawStateID != "state-2" {
 		t.Fatalf("expected stateId state-2, got %q", sawStateID)
+	}
+}
+
+func TestExtractUploadsLinearURLs(t *testing.T) {
+	text := `
+Main [doc](https://uploads.linear.app/abc-123/spec.md) and plain https://uploads.linear.app/def-456/log.txt.
+Ignore https://example.com/file.txt
+`
+
+	got := extractUploadsLinearURLs(text)
+	want := []string{
+		"https://uploads.linear.app/abc-123/spec.md",
+		"https://uploads.linear.app/def-456/log.txt",
+	}
+
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("expected %v, got %v", want, got)
+	}
+}
+
+func TestCollectIssueAttachmentEntries(t *testing.T) {
+	issue := &api.Issue{
+		Description: "See https://uploads.linear.app/path/from-description.md",
+		Attachments: &api.Attachments{
+			Nodes: []api.Attachment{
+				{ID: "att-1", Title: "Canonical", URL: "https://uploads.linear.app/path/from-attachment.md"},
+			},
+		},
+		Comments: &api.Comments{
+			Nodes: []api.Comment{
+				{Body: "Another link https://uploads.linear.app/path/from-comment.md"},
+				{Body: "Duplicate https://uploads.linear.app/path/from-attachment.md should not repeat"},
+			},
+		},
+	}
+
+	entries := collectIssueAttachmentEntries(issue)
+	if len(entries) != 3 {
+		t.Fatalf("expected 3 unique entries, got %d: %#v", len(entries), entries)
+	}
+
+	if entries[0].Source != "attachment" || entries[0].ID != "att-1" {
+		t.Fatalf("expected first entry to be canonical attachment, got %#v", entries[0])
+	}
+}
+
+func TestSelectAttachmentEntriesForDownload(t *testing.T) {
+	entries := []issueAttachmentEntry{
+		{ID: "a-1", Title: "spec.md", URL: "https://uploads.linear.app/x/spec.md", Source: "attachment"},
+		{ID: "a-2", Title: "notes.md", URL: "https://uploads.linear.app/y/notes.md", Source: "attachment"},
+	}
+
+	gotAll, err := selectAttachmentEntriesForDownload(entries, true, "", "")
+	if err != nil || len(gotAll) != 2 {
+		t.Fatalf("expected all entries, got len=%d err=%v", len(gotAll), err)
+	}
+
+	gotID, err := selectAttachmentEntriesForDownload(entries, false, "a-2", "")
+	if err != nil || len(gotID) != 1 || gotID[0].ID != "a-2" {
+		t.Fatalf("expected id selection a-2, got %#v err=%v", gotID, err)
+	}
+
+	gotName, err := selectAttachmentEntriesForDownload(entries, false, "", "spec.md")
+	if err != nil || len(gotName) != 1 || gotName[0].ID != "a-1" {
+		t.Fatalf("expected name selection spec.md, got %#v err=%v", gotName, err)
+	}
+}
+
+func TestIssueAttachmentFlagsRegistered(t *testing.T) {
+	if issueGetCmd.Flags().Lookup("download-attachments") == nil {
+		t.Fatalf("issue get is missing --download-attachments")
+	}
+	if issueGetCmd.Flags().Lookup("output-dir") == nil {
+		t.Fatalf("issue get is missing --output-dir")
+	}
+
+	for _, name := range []string{"all", "id", "name", "output", "output-dir"} {
+		if issueAttachmentDownloadCmd.Flags().Lookup(name) == nil {
+			t.Fatalf("issue attachment download is missing --%s", name)
+		}
 	}
 }

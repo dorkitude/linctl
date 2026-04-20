@@ -119,6 +119,7 @@ linctl issue list --newer-than 1_day_ago
 
 # Get issue details (now includes git branch, cycle, project, attachments, and comments)
 linctl issue get LIN-123
+linctl issue get LIN-123 --download-attachments --output-dir ./downloads
 
 # Create a new issue
 linctl issue create --title "Bug fix" --team ENG
@@ -166,6 +167,12 @@ linctl issue update LIN-123 --title "Critical Bug" --assignee me --priority 1 --
 linctl issue attach LIN-123 --pr https://github.com/owner/repo/pull/456
 linctl issue attach LIN-123 --pr 456  # Resolves repo from git remote origin
 linctl issue attach LIN-123 --url https://example.com/spec --title "Spec"
+
+# List/download attachments and uploads.linear.app links
+linctl issue attachment list LIN-123
+linctl issue attachment download LIN-123 --all --output-dir ./downloads
+linctl issue attachment download LIN-123 --id ATTACHMENT-ID
+linctl issue attachment download LIN-123 --name spec.md --output ./spec.md
 
 # Manage issue relations (blocks, blocked-by, related, duplicate, similar)
 linctl issue relation list LIN-123
@@ -351,6 +358,9 @@ linctl issue ls [flags]     # Short alias
 # Get issue details (shows parent and sub-issues)
 linctl issue get <issue-id>
 linctl issue show <issue-id>  # Alias
+# Flags:
+  --download-attachments   Download issue attachments and uploads.linear.app links from description/comments
+  --output-dir string      Directory for downloaded attachments when using --download-attachments (default ".")
 
 # Create issue
 linctl issue create [flags]
@@ -395,6 +405,19 @@ linctl issue attach <issue-id> [flags]
   --title string           Attachment title (required with --url)
   --subtitle string        Attachment subtitle
   --icon-url string        Attachment icon URL
+
+# List attachment entries (canonical attachments + uploads links from markdown)
+linctl issue attachment list <issue-id>
+linctl issue attachment ls <issue-id>   # Alias
+
+# Download attachment entries
+linctl issue attachment download <issue-id> [flags]
+# Flags:
+  --all                    Download all attachment entries
+  --id string              Download by canonical attachment ID
+  --name string            Download by title or filename
+  --output string          Write a single download to this path
+  --output-dir string      Directory to save downloads (default ".")
 
 ```
 

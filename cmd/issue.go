@@ -3,9 +3,15 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"io"
+	"mime"
+	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -34,6 +40,25 @@ Examples:
   linctl issue search "login bug" --team ENG
   linctl issue get LIN-123
   linctl issue create --title "Bug fix" --team ENG`,
+}
+
+var uploadsLinearURLPattern = regexp.MustCompile(`https://uploads\.linear\.app/[^\s<>"'\)\]]+`)
+
+type issueAttachmentEntry struct {
+	ID     string `json:"id,omitempty"`
+	Title  string `json:"title"`
+	URL    string `json:"url"`
+	Source string `json:"source"`
+}
+
+type issueAttachmentDownloadResult struct {
+	ID       string `json:"id,omitempty"`
+	Title    string `json:"title"`
+	URL      string `json:"url"`
+	Source   string `json:"source"`
+	FilePath string `json:"filePath,omitempty"`
+	Success  bool   `json:"success"`
+	Error    string `json:"error,omitempty"`
 }
 
 var issueListCmd = &cobra.Command{
@@ -310,7 +335,35 @@ var issueGetCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
+		downloadAttachments, _ := cmd.Flags().GetBool("download-attachments")
+		outputDir, _ := cmd.Flags().GetString("output-dir")
+		if strings.TrimSpace(outputDir) == "" {
+			outputDir = "."
+		}
+
+		var downloadResults []issueAttachmentDownloadResult
+		hasDownloadFailure := false
+		if downloadAttachments {
+			entries := collectIssueAttachmentEntries(issue)
+			downloadResults, err = downloadIssueAttachmentEntries(context.Background(), authHeader, entries, outputDir, "")
+			if err != nil {
+				output.Error(fmt.Sprintf("Failed to download attachments: %v", err), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			hasDownloadFailure = hasAttachmentDownloadFailures(downloadResults)
+		}
+
 		if jsonOut {
+			if downloadAttachments {
+				output.JSON(map[string]interface{}{
+					"issue":     issue,
+					"downloads": downloadResults,
+				})
+				if hasDownloadFailure {
+					os.Exit(1)
+				}
+				return
+			}
 			output.JSON(issue)
 			return
 		}
@@ -593,6 +646,13 @@ var issueGetCmd = &cobra.Command{
 				}
 			}
 
+			if downloadAttachments {
+				renderAttachmentDownloadResults(downloadResults, plaintext, jsonOut)
+				if hasDownloadFailure {
+					os.Exit(1)
+				}
+			}
+
 			return
 		}
 
@@ -739,6 +799,13 @@ var issueGetCmd = &cobra.Command{
 			fmt.Printf("\n  %s Use 'linctl comment list %s' to see all comments\n",
 				color.New(color.FgWhite, color.Faint).Sprint("→"),
 				issue.Identifier)
+		}
+
+		if downloadAttachments {
+			renderAttachmentDownloadResults(downloadResults, plaintext, jsonOut)
+			if hasDownloadFailure {
+				os.Exit(1)
+			}
 		}
 	},
 }
@@ -1625,6 +1692,461 @@ Examples:
 	},
 }
 
+var issueAttachmentCmd = &cobra.Command{
+	Use:     "attachment",
+	Aliases: []string{"attachments"},
+	Short:   "List and download issue attachments",
+	Long: `List and download issue attachments and upload links.
+
+Examples:
+  linctl issue attachment list LIN-123
+  linctl issue attachment download LIN-123 --all --output-dir ./downloads
+  linctl issue attachment download LIN-123 --id ATTACHMENT-ID
+  linctl issue attachment download LIN-123 --name spec.md --output ./spec.md`,
+}
+
+var issueAttachmentListCmd = &cobra.Command{
+	Use:     "list [issue-id]",
+	Aliases: []string{"ls"},
+	Short:   "List issue attachments and upload links",
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error("Not authenticated. Run 'linctl auth' first.", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+		issue, err := client.GetIssue(context.Background(), args[0])
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to fetch issue: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		entries := collectIssueAttachmentEntries(issue)
+		if len(entries) == 0 {
+			output.Info(fmt.Sprintf("No attachment entries found for %s", issue.Identifier), plaintext, jsonOut)
+			return
+		}
+
+		if jsonOut {
+			output.JSON(entries)
+			return
+		}
+
+		if plaintext {
+			fmt.Printf("# Attachment Entries for %s\n\n", issue.Identifier)
+			for _, entry := range entries {
+				fmt.Printf("- **Title**: %s\n", entry.Title)
+				fmt.Printf("  - **Source**: %s\n", entry.Source)
+				if entry.ID != "" {
+					fmt.Printf("  - **ID**: %s\n", entry.ID)
+				}
+				fmt.Printf("  - **URL**: %s\n", entry.URL)
+			}
+			fmt.Printf("\nTotal: %d entries\n", len(entries))
+			return
+		}
+
+		headers := []string{"Title", "Source", "ID", "URL"}
+		rows := make([][]string, 0, len(entries))
+		for _, entry := range entries {
+			rows = append(rows, []string{
+				truncateString(entry.Title, 40),
+				entry.Source,
+				entry.ID,
+				entry.URL,
+			})
+		}
+		output.Table(output.TableData{Headers: headers, Rows: rows}, false, false)
+		fmt.Printf("\n%s %d attachment entries\n",
+			color.New(color.FgGreen).Sprint("✓"),
+			len(entries))
+	},
+}
+
+var issueAttachmentDownloadCmd = &cobra.Command{
+	Use:     "download [issue-id]",
+	Aliases: []string{"dl"},
+	Short:   "Download issue attachments and upload links",
+	Args:    cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		plaintext := viper.GetBool("plaintext")
+		jsonOut := viper.GetBool("json")
+
+		authHeader, err := auth.GetAuthHeader()
+		if err != nil {
+			output.Error("Not authenticated. Run 'linctl auth' first.", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		downloadAll, _ := cmd.Flags().GetBool("all")
+		attachmentID, _ := cmd.Flags().GetString("id")
+		name, _ := cmd.Flags().GetString("name")
+		outputPath, _ := cmd.Flags().GetString("output")
+		outputDir, _ := cmd.Flags().GetString("output-dir")
+
+		if strings.TrimSpace(outputDir) == "" {
+			outputDir = "."
+		}
+
+		if downloadAll && (attachmentID != "" || name != "") {
+			output.Error("--all cannot be combined with --id or --name", plaintext, jsonOut)
+			os.Exit(1)
+		}
+		if attachmentID != "" && name != "" {
+			output.Error("--id and --name are mutually exclusive", plaintext, jsonOut)
+			os.Exit(1)
+		}
+		if outputPath != "" && outputDir != "." {
+			output.Error("--output and --output-dir are mutually exclusive", plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		client := api.NewClient(authHeader)
+		issue, err := client.GetIssue(context.Background(), args[0])
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to fetch issue: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		entries := collectIssueAttachmentEntries(issue)
+		selectedEntries, err := selectAttachmentEntriesForDownload(entries, downloadAll, attachmentID, name)
+		if err != nil {
+			output.Error(err.Error(), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		results, err := downloadIssueAttachmentEntries(context.Background(), authHeader, selectedEntries, outputDir, outputPath)
+		if err != nil {
+			output.Error(fmt.Sprintf("Failed to download attachments: %v", err), plaintext, jsonOut)
+			os.Exit(1)
+		}
+
+		if jsonOut {
+			output.JSON(results)
+		} else {
+			renderAttachmentDownloadResults(results, plaintext, jsonOut)
+		}
+
+		if hasAttachmentDownloadFailures(results) {
+			os.Exit(1)
+		}
+	},
+}
+
+func collectIssueAttachmentEntries(issue *api.Issue) []issueAttachmentEntry {
+	entries := make([]issueAttachmentEntry, 0)
+	seenURLs := make(map[string]bool)
+
+	if issue != nil && issue.Attachments != nil {
+		for _, attachment := range issue.Attachments.Nodes {
+			normalizedURL := strings.TrimSpace(attachment.URL)
+			if normalizedURL == "" || seenURLs[normalizedURL] {
+				continue
+			}
+			seenURLs[normalizedURL] = true
+
+			title := strings.TrimSpace(attachment.Title)
+			if title == "" {
+				title = defaultAttachmentTitleFromURL(normalizedURL)
+			}
+
+			entries = append(entries, issueAttachmentEntry{
+				ID:     attachment.ID,
+				Title:  title,
+				URL:    normalizedURL,
+				Source: "attachment",
+			})
+		}
+	}
+
+	markdownTexts := make([]string, 0)
+	if issue != nil {
+		markdownTexts = append(markdownTexts, issue.Description)
+		if issue.Comments != nil {
+			for _, comment := range issue.Comments.Nodes {
+				markdownTexts = append(markdownTexts, comment.Body)
+			}
+		}
+	}
+
+	for _, text := range markdownTexts {
+		for _, rawURL := range extractUploadsLinearURLs(text) {
+			normalizedURL := strings.TrimSpace(rawURL)
+			if normalizedURL == "" || seenURLs[normalizedURL] {
+				continue
+			}
+			seenURLs[normalizedURL] = true
+			entries = append(entries, issueAttachmentEntry{
+				Title:  defaultAttachmentTitleFromURL(normalizedURL),
+				URL:    normalizedURL,
+				Source: "markdown",
+			})
+		}
+	}
+
+	return entries
+}
+
+func extractUploadsLinearURLs(text string) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	matches := uploadsLinearURLPattern.FindAllString(text, -1)
+	urls := make([]string, 0, len(matches))
+	for _, match := range matches {
+		cleaned := strings.TrimSpace(match)
+		cleaned = strings.TrimRight(cleaned, ".,;:!?)")
+		if cleaned != "" {
+			urls = append(urls, cleaned)
+		}
+	}
+	return urls
+}
+
+func selectAttachmentEntriesForDownload(entries []issueAttachmentEntry, downloadAll bool, attachmentID, name string) ([]issueAttachmentEntry, error) {
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("no attachment entries available")
+	}
+
+	if downloadAll {
+		return entries, nil
+	}
+
+	idValue := strings.TrimSpace(attachmentID)
+	if idValue != "" {
+		matches := make([]issueAttachmentEntry, 0, 1)
+		for _, entry := range entries {
+			if strings.EqualFold(entry.ID, idValue) {
+				matches = append(matches, entry)
+				break
+			}
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("attachment id %q not found", attachmentID)
+		}
+		return matches, nil
+	}
+
+	nameValue := strings.TrimSpace(name)
+	if nameValue != "" {
+		matches := make([]issueAttachmentEntry, 0)
+		for _, entry := range entries {
+			fileName := strings.TrimSpace(defaultAttachmentTitleFromURL(entry.URL))
+			if strings.EqualFold(entry.Title, nameValue) || strings.EqualFold(fileName, nameValue) {
+				matches = append(matches, entry)
+			}
+		}
+		if len(matches) == 0 {
+			return nil, fmt.Errorf("attachment name %q not found", name)
+		}
+		if len(matches) > 1 {
+			return nil, fmt.Errorf("attachment name %q matched multiple entries; use --id or --all", name)
+		}
+		return matches, nil
+	}
+
+	if len(entries) == 1 {
+		return entries, nil
+	}
+	return nil, fmt.Errorf("multiple attachment entries found; specify --all, --id, or --name")
+}
+
+func downloadIssueAttachmentEntries(ctx context.Context, authHeader string, entries []issueAttachmentEntry, outputDir, outputPath string) ([]issueAttachmentDownloadResult, error) {
+	if outputPath != "" && len(entries) != 1 {
+		return nil, fmt.Errorf("--output can only be used when downloading a single file")
+	}
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, err
+	}
+
+	results := make([]issueAttachmentDownloadResult, 0, len(entries))
+	for _, entry := range entries {
+		result := issueAttachmentDownloadResult{
+			ID:     entry.ID,
+			Title:  entry.Title,
+			URL:    entry.URL,
+			Source: entry.Source,
+		}
+
+		filePath, err := downloadAttachmentEntry(ctx, authHeader, entry, outputDir, outputPath)
+		if err != nil {
+			result.Success = false
+			result.Error = err.Error()
+		} else {
+			result.Success = true
+			result.FilePath = filePath
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func downloadAttachmentEntry(ctx context.Context, authHeader string, entry issueAttachmentEntry, outputDir, outputPath string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, entry.URL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Authorization", authHeader)
+	req.Header.Set("User-Agent", "linctl/0.1.0")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+		return "", fmt.Errorf("download failed with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+
+	targetPath := strings.TrimSpace(outputPath)
+	if targetPath == "" {
+		filename := resolveDownloadFilename(resp, entry)
+		targetPath = uniqueDownloadPath(outputDir, filename)
+	} else {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+			return "", err
+		}
+	}
+
+	file, err := os.Create(targetPath)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = file.Close() }()
+
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		return "", err
+	}
+
+	absPath, err := filepath.Abs(targetPath)
+	if err != nil {
+		return targetPath, nil
+	}
+	return absPath, nil
+}
+
+func resolveDownloadFilename(resp *http.Response, entry issueAttachmentEntry) string {
+	if resp != nil {
+		if disposition := strings.TrimSpace(resp.Header.Get("Content-Disposition")); disposition != "" {
+			if _, params, err := mime.ParseMediaType(disposition); err == nil {
+				if encoded := strings.TrimSpace(params["filename*"]); encoded != "" {
+					if parts := strings.SplitN(encoded, "''", 2); len(parts) == 2 {
+						if unescaped, unescapeErr := url.QueryUnescape(parts[1]); unescapeErr == nil && strings.TrimSpace(unescaped) != "" {
+							return sanitizeFilename(unescaped)
+						}
+					}
+				}
+				if filename := strings.TrimSpace(params["filename"]); filename != "" {
+					return sanitizeFilename(filename)
+				}
+			}
+		}
+	}
+
+	if title := sanitizeFilename(entry.Title); title != "" {
+		return title
+	}
+	if fromURL := sanitizeFilename(defaultAttachmentTitleFromURL(entry.URL)); fromURL != "" {
+		return fromURL
+	}
+	return "attachment"
+}
+
+func sanitizeFilename(name string) string {
+	clean := strings.TrimSpace(name)
+	clean = strings.Trim(clean, "\"'")
+	clean = filepath.Base(clean)
+	if clean == "." || clean == "/" || clean == "" {
+		return ""
+	}
+	clean = strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', ':', '*', '?', '"', '<', '>', '|':
+			return '-'
+		default:
+			return r
+		}
+	}, clean)
+	return strings.TrimSpace(clean)
+}
+
+func uniqueDownloadPath(outputDir, filename string) string {
+	base := sanitizeFilename(filename)
+	if base == "" {
+		base = "attachment"
+	}
+
+	candidate := filepath.Join(outputDir, base)
+	if _, err := os.Stat(candidate); os.IsNotExist(err) {
+		return candidate
+	}
+
+	ext := filepath.Ext(base)
+	nameOnly := strings.TrimSuffix(base, ext)
+	for i := 2; i < 10000; i++ {
+		next := filepath.Join(outputDir, fmt.Sprintf("%s-%d%s", nameOnly, i, ext))
+		if _, err := os.Stat(next); os.IsNotExist(err) {
+			return next
+		}
+	}
+	return filepath.Join(outputDir, fmt.Sprintf("%s-%d%s", nameOnly, os.Getpid(), ext))
+}
+
+func defaultAttachmentTitleFromURL(rawURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "attachment"
+	}
+	base := path.Base(parsed.Path)
+	if base == "." || base == "/" || base == "" {
+		return "attachment"
+	}
+	return base
+}
+
+func hasAttachmentDownloadFailures(results []issueAttachmentDownloadResult) bool {
+	for _, result := range results {
+		if !result.Success {
+			return true
+		}
+	}
+	return false
+}
+
+func renderAttachmentDownloadResults(results []issueAttachmentDownloadResult, plaintext, _ bool) {
+	if plaintext {
+		fmt.Printf("\n## Attachment Downloads\n")
+		for _, result := range results {
+			if result.Success {
+				fmt.Printf("- OK: %s -> %s\n", result.URL, result.FilePath)
+			} else {
+				fmt.Printf("- FAILED: %s (%s)\n", result.URL, result.Error)
+			}
+		}
+		return
+	}
+
+	fmt.Printf("\n%s\n", color.New(color.FgYellow).Sprint("Attachment Downloads:"))
+	for _, result := range results {
+		if result.Success {
+			fmt.Printf("  %s %s\n", color.New(color.FgGreen).Sprint("✓"), result.FilePath)
+		} else {
+			fmt.Printf("  %s %s (%s)\n", color.New(color.FgRed).Sprint("✗"), result.URL, result.Error)
+		}
+	}
+}
+
 func validateAttachmentURL(raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil {
@@ -1806,6 +2328,9 @@ func init() {
 	issueCmd.AddCommand(issueCreateCmd)
 	issueCmd.AddCommand(issueUpdateCmd)
 	issueCmd.AddCommand(issueAttachCmd)
+	issueCmd.AddCommand(issueAttachmentCmd)
+	issueAttachmentCmd.AddCommand(issueAttachmentListCmd)
+	issueAttachmentCmd.AddCommand(issueAttachmentDownloadCmd)
 
 	// Issue list flags
 	issueListCmd.Flags().StringP("assignee", "a", "", "Filter by assignee (email or 'me')")
@@ -1829,6 +2354,10 @@ func init() {
 	issueSearchCmd.Flags().Bool("include-archived", false, "Include archived issues in results")
 	issueSearchCmd.Flags().StringP("sort", "o", "linear", "Sort order: linear (default), created, updated")
 	issueSearchCmd.Flags().StringP("newer-than", "n", "", "Show issues created after this time (default: 6_months_ago, use 'all_time' for no filter)")
+
+	// Issue get flags
+	issueGetCmd.Flags().Bool("download-attachments", false, "Download issue attachments and uploads.linear.app links from description/comments")
+	issueGetCmd.Flags().String("output-dir", ".", "Directory to save downloaded attachments (used with --download-attachments)")
 
 	// Issue create flags
 	issueCreateCmd.Flags().StringP("title", "", "", "Issue title (required)")
@@ -1864,4 +2393,11 @@ func init() {
 	issueAttachCmd.Flags().String("title", "", "Attachment title (required with --url)")
 	issueAttachCmd.Flags().String("subtitle", "", "Attachment subtitle")
 	issueAttachCmd.Flags().String("icon-url", "", "Attachment icon URL")
+
+	// Issue attachment list/download flags
+	issueAttachmentDownloadCmd.Flags().Bool("all", false, "Download all attachment entries")
+	issueAttachmentDownloadCmd.Flags().String("id", "", "Download by canonical attachment ID")
+	issueAttachmentDownloadCmd.Flags().String("name", "", "Download by title or filename")
+	issueAttachmentDownloadCmd.Flags().String("output", "", "Write a single file to this path")
+	issueAttachmentDownloadCmd.Flags().String("output-dir", ".", "Directory to save downloaded files")
 }
