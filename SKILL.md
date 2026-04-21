@@ -52,6 +52,7 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 - Labels: `linctl label ...`
 - Agent Sessions: `linctl agent ...`
 - Auth: `linctl auth ...`
+- Dynamic MCP: `linctl mcp ...` (`sync`, `tools`, `call`)
 
 ## Suggested Read Patterns
 
@@ -76,6 +77,11 @@ linctl team state list <TEAM_KEY> --json
 
 # Agent session status for an issue
 linctl agent <ISSUE_ID> --json
+
+# Dynamic schema-backed tool list and call
+linctl mcp sync
+linctl mcp tools --json
+linctl mcp call query.viewer
 ```
 
 ## Suggested Write Patterns
