@@ -17,6 +17,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
 - **Comments**: list/get/create/update/delete.
 - **Agent Sessions**: inspect issue agent session state and mention delegated/active agents.
 - **Raw GraphQL**: execute arbitrary Linear GraphQL using your `linctl` auth context.
+- **Dynamic MCP namespace**: discover and call schema-backed operations via `linctl mcp`.
 - **Output modes**: table, plaintext, and JSON.
 - **Sorting and time filters**: reusable list/search filtering patterns.
 - **Built-in docs**: `linctl docs`.
@@ -302,6 +303,24 @@ linctl graphql --file query.graphql --variables-file vars.json
 cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
 ```
 
+### 10. Dynamic MCP Tools (Schema-Driven)
+```bash
+# Sync cache from live schema introspection (12h TTL)
+linctl mcp sync
+
+# List cached dynamic tools
+linctl mcp tools
+
+# Call a tool (full name)
+linctl mcp call query.viewer
+
+# Call a mutation with JSON arguments
+linctl mcp call mutation.issueCreate --json '{"input":{"title":"Fix login","teamId":"team-id"}}'
+
+# Override selection set for object return types
+linctl mcp call query.issue --json '{"id":"LIN-123"}' --selection '{ id identifier title state { name } }'
+```
+
 ## Command Reference
 
 ### Global Flags
@@ -329,6 +348,22 @@ linctl graphql [query] [flags]
   -f, --file string            Path to a .graphql file
       --variables string       Variables as JSON object string
       --variables-file string  Path to JSON object file with variables
+```
+
+### MCP Commands
+```bash
+# Refresh cache of dynamic tools discovered from Linear schema
+linctl mcp sync
+
+# List cached tools (name, args, return type)
+linctl mcp tools
+
+# Call by full name (`query.*` or `mutation.*`)
+linctl mcp call <tool-name> [flags]
+
+# Flags:
+      --json string        JSON object of tool arguments
+      --selection string   Override selection set for object/interface/union return types
 ```
 
 ### Issue Commands
