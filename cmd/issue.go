@@ -56,6 +56,8 @@ type issueAttachmentDownloadResult struct {
 	Title    string `json:"title"`
 	URL      string `json:"url"`
 	Source   string `json:"source"`
+	Status   string `json:"status"`
+	Reason   string `json:"reason,omitempty"`
 	FilePath string `json:"filePath,omitempty"`
 	Success  bool   `json:"success"`
 	Error    string `json:"error,omitempty"`
@@ -345,11 +347,17 @@ var issueGetCmd = &cobra.Command{
 		hasDownloadFailure := false
 		if downloadAttachments {
 			entries := collectIssueAttachmentEntries(issue)
-			downloadResults, err = downloadIssueAttachmentEntries(context.Background(), authHeader, entries, outputDir, "")
+			entriesToDownload, skippedResults, selectErr := selectAttachmentEntriesForDownload(entries, true, "", "")
+			if selectErr != nil {
+				output.Error(fmt.Sprintf("Failed to select attachments: %v", selectErr), plaintext, jsonOut)
+				os.Exit(1)
+			}
+			downloadResults, err = downloadIssueAttachmentEntries(context.Background(), authHeader, entriesToDownload, outputDir, "")
 			if err != nil {
 				output.Error(fmt.Sprintf("Failed to download attachments: %v", err), plaintext, jsonOut)
 				os.Exit(1)
 			}
+			downloadResults = append(skippedResults, downloadResults...)
 			hasDownloadFailure = hasAttachmentDownloadFailures(downloadResults)
 		}
 
@@ -1815,7 +1823,7 @@ var issueAttachmentDownloadCmd = &cobra.Command{
 		}
 
 		entries := collectIssueAttachmentEntries(issue)
-		selectedEntries, err := selectAttachmentEntriesForDownload(entries, downloadAll, attachmentID, name)
+		selectedEntries, skippedResults, err := selectAttachmentEntriesForDownload(entries, downloadAll, attachmentID, name)
 		if err != nil {
 			output.Error(err.Error(), plaintext, jsonOut)
 			os.Exit(1)
@@ -1826,6 +1834,7 @@ var issueAttachmentDownloadCmd = &cobra.Command{
 			output.Error(fmt.Sprintf("Failed to download attachments: %v", err), plaintext, jsonOut)
 			os.Exit(1)
 		}
+		results = append(skippedResults, results...)
 
 		if jsonOut {
 			output.JSON(results)
@@ -1909,13 +1918,31 @@ func extractUploadsLinearURLs(text string) []string {
 	return urls
 }
 
-func selectAttachmentEntriesForDownload(entries []issueAttachmentEntry, downloadAll bool, attachmentID, name string) ([]issueAttachmentEntry, error) {
+func selectAttachmentEntriesForDownload(entries []issueAttachmentEntry, downloadAll bool, attachmentID, name string) ([]issueAttachmentEntry, []issueAttachmentDownloadResult, error) {
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("no attachment entries available")
+		return nil, nil, fmt.Errorf("no attachment entries available")
 	}
 
 	if downloadAll {
-		return entries, nil
+		selected := make([]issueAttachmentEntry, 0, len(entries))
+		skipped := make([]issueAttachmentDownloadResult, 0)
+		for _, entry := range entries {
+			downloadable, reason := isDownloadableAttachmentEntry(entry)
+			if downloadable {
+				selected = append(selected, entry)
+				continue
+			}
+			skipped = append(skipped, issueAttachmentDownloadResult{
+				ID:      entry.ID,
+				Title:   entry.Title,
+				URL:     entry.URL,
+				Source:  entry.Source,
+				Status:  "skipped",
+				Reason:  reason,
+				Success: false,
+			})
+		}
+		return selected, skipped, nil
 	}
 
 	idValue := strings.TrimSpace(attachmentID)
@@ -1928,9 +1955,9 @@ func selectAttachmentEntriesForDownload(entries []issueAttachmentEntry, download
 			}
 		}
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("attachment id %q not found", attachmentID)
+			return nil, nil, fmt.Errorf("attachment id %q not found", attachmentID)
 		}
-		return matches, nil
+		return matches, nil, nil
 	}
 
 	nameValue := strings.TrimSpace(name)
@@ -1943,18 +1970,18 @@ func selectAttachmentEntriesForDownload(entries []issueAttachmentEntry, download
 			}
 		}
 		if len(matches) == 0 {
-			return nil, fmt.Errorf("attachment name %q not found", name)
+			return nil, nil, fmt.Errorf("attachment name %q not found", name)
 		}
 		if len(matches) > 1 {
-			return nil, fmt.Errorf("attachment name %q matched multiple entries; use --id or --all", name)
+			return nil, nil, fmt.Errorf("attachment name %q matched multiple entries; use --id or --all", name)
 		}
-		return matches, nil
+		return matches, nil, nil
 	}
 
 	if len(entries) == 1 {
-		return entries, nil
+		return entries, nil, nil
 	}
-	return nil, fmt.Errorf("multiple attachment entries found; specify --all, --id, or --name")
+	return nil, nil, fmt.Errorf("multiple attachment entries found; specify --all, --id, or --name")
 }
 
 func downloadIssueAttachmentEntries(ctx context.Context, authHeader string, entries []issueAttachmentEntry, outputDir, outputPath string) ([]issueAttachmentDownloadResult, error) {
@@ -1977,9 +2004,11 @@ func downloadIssueAttachmentEntries(ctx context.Context, authHeader string, entr
 
 		filePath, err := downloadAttachmentEntry(ctx, authHeader, entry, outputDir, outputPath)
 		if err != nil {
+			result.Status = "failed"
 			result.Success = false
 			result.Error = err.Error()
 		} else {
+			result.Status = "downloaded"
 			result.Success = true
 			result.FilePath = filePath
 		}
@@ -2115,9 +2144,29 @@ func defaultAttachmentTitleFromURL(rawURL string) string {
 	return base
 }
 
+func isDownloadableAttachmentEntry(entry issueAttachmentEntry) (bool, string) {
+	parsed, err := url.Parse(strings.TrimSpace(entry.URL))
+	if err != nil || parsed.Host == "" {
+		return false, "invalid-url"
+	}
+
+	host := strings.ToLower(parsed.Host)
+	pathLower := strings.ToLower(parsed.Path)
+
+	if host == "uploads.linear.app" {
+		return true, ""
+	}
+
+	if host == "github.com" && (strings.Contains(pathLower, "/pull/") || strings.Contains(pathLower, "/issues/")) {
+		return false, "non-downloadable-link"
+	}
+
+	return true, ""
+}
+
 func hasAttachmentDownloadFailures(results []issueAttachmentDownloadResult) bool {
 	for _, result := range results {
-		if !result.Success {
+		if result.Status == "failed" || (!result.Success && result.Status == "") {
 			return true
 		}
 	}
@@ -2128,7 +2177,9 @@ func renderAttachmentDownloadResults(results []issueAttachmentDownloadResult, pl
 	if plaintext {
 		fmt.Printf("\n## Attachment Downloads\n")
 		for _, result := range results {
-			if result.Success {
+			if result.Status == "skipped" {
+				fmt.Printf("- SKIPPED: %s (%s)\n", result.URL, result.Reason)
+			} else if result.Success {
 				fmt.Printf("- OK: %s -> %s\n", result.URL, result.FilePath)
 			} else {
 				fmt.Printf("- FAILED: %s (%s)\n", result.URL, result.Error)
@@ -2139,7 +2190,9 @@ func renderAttachmentDownloadResults(results []issueAttachmentDownloadResult, pl
 
 	fmt.Printf("\n%s\n", color.New(color.FgYellow).Sprint("Attachment Downloads:"))
 	for _, result := range results {
-		if result.Success {
+		if result.Status == "skipped" {
+			fmt.Printf("  %s %s (%s)\n", color.New(color.FgYellow).Sprint("→"), result.URL, result.Reason)
+		} else if result.Success {
 			fmt.Printf("  %s %s\n", color.New(color.FgGreen).Sprint("✓"), result.FilePath)
 		} else {
 			fmt.Printf("  %s %s (%s)\n", color.New(color.FgRed).Sprint("✗"), result.URL, result.Error)

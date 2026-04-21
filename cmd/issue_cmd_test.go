@@ -135,19 +135,61 @@ func TestSelectAttachmentEntriesForDownload(t *testing.T) {
 		{ID: "a-2", Title: "notes.md", URL: "https://uploads.linear.app/y/notes.md", Source: "attachment"},
 	}
 
-	gotAll, err := selectAttachmentEntriesForDownload(entries, true, "", "")
-	if err != nil || len(gotAll) != 2 {
-		t.Fatalf("expected all entries, got len=%d err=%v", len(gotAll), err)
+	gotAll, skippedAll, err := selectAttachmentEntriesForDownload(entries, true, "", "")
+	if err != nil || len(gotAll) != 2 || len(skippedAll) != 0 {
+		t.Fatalf("expected all entries selected without skips, got selected=%d skipped=%d err=%v", len(gotAll), len(skippedAll), err)
 	}
 
-	gotID, err := selectAttachmentEntriesForDownload(entries, false, "a-2", "")
+	gotID, skippedID, err := selectAttachmentEntriesForDownload(entries, false, "a-2", "")
 	if err != nil || len(gotID) != 1 || gotID[0].ID != "a-2" {
 		t.Fatalf("expected id selection a-2, got %#v err=%v", gotID, err)
 	}
+	if len(skippedID) != 0 {
+		t.Fatalf("expected no skipped entries for id selection, got %#v", skippedID)
+	}
 
-	gotName, err := selectAttachmentEntriesForDownload(entries, false, "", "spec.md")
+	gotName, skippedName, err := selectAttachmentEntriesForDownload(entries, false, "", "spec.md")
 	if err != nil || len(gotName) != 1 || gotName[0].ID != "a-1" {
 		t.Fatalf("expected name selection spec.md, got %#v err=%v", gotName, err)
+	}
+	if len(skippedName) != 0 {
+		t.Fatalf("expected no skipped entries for name selection, got %#v", skippedName)
+	}
+}
+
+func TestSelectAttachmentEntriesForDownloadAllSkipsNonDownloadableLinks(t *testing.T) {
+	entries := []issueAttachmentEntry{
+		{ID: "a-1", Title: "pr", URL: "https://github.com/org/repo/pull/123", Source: "attachment"},
+		{ID: "a-2", Title: "file.md", URL: "https://uploads.linear.app/abc/file.md", Source: "markdown"},
+	}
+
+	selected, skipped, err := selectAttachmentEntriesForDownload(entries, true, "", "")
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if len(selected) != 1 || selected[0].ID != "a-2" {
+		t.Fatalf("expected only uploads entry selected, got %#v", selected)
+	}
+	if len(skipped) != 1 {
+		t.Fatalf("expected one skipped entry, got %#v", skipped)
+	}
+	if skipped[0].Status != "skipped" || skipped[0].Reason != "non-downloadable-link" {
+		t.Fatalf("unexpected skipped metadata: %#v", skipped[0])
+	}
+}
+
+func TestHasAttachmentDownloadFailuresIgnoresSkipped(t *testing.T) {
+	results := []issueAttachmentDownloadResult{
+		{Status: "skipped", Success: false},
+		{Status: "downloaded", Success: true},
+	}
+	if hasAttachmentDownloadFailures(results) {
+		t.Fatalf("skipped entries should not count as failures")
+	}
+
+	results = append(results, issueAttachmentDownloadResult{Status: "failed", Success: false})
+	if !hasAttachmentDownloadFailures(results) {
+		t.Fatalf("failed entries must count as failures")
 	}
 }
 
