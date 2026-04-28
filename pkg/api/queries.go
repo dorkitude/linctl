@@ -1342,6 +1342,7 @@ func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]
 					id
 					name
 					description
+					content
 					state
 					progress
 					startDate

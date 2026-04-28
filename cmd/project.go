@@ -891,6 +891,11 @@ Examples:
 			input["color"] = colorValue
 		}
 
+		if cmd.Flags().Changed("content") {
+			content, _ := cmd.Flags().GetString("content")
+			input["content"] = content
+		}
+
 		// Check if any updates were specified
 		if len(input) == 0 {
 			output.Error("No updates specified. Use flags to specify what to update.", plaintext, jsonOut)
@@ -1051,6 +1056,7 @@ func init() {
 	projectUpdateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD, or empty to remove)")
 	projectUpdateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD, or empty to remove)")
 	projectUpdateCmd.Flags().String("color", "", "Project color (hex code)")
+	projectUpdateCmd.Flags().String("content", "", "Project document body content")
 
 	// Delete command flags
 	projectDeleteCmd.Flags().Bool("permanent", false, "Permanently delete (cannot be undone)")
