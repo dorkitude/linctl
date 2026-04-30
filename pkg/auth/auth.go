@@ -6,12 +6,49 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/dorkitude/linctl/pkg/api"
 	"github.com/fatih/color"
 )
+
+// passEntryName returns the pass(1) entry name to use, or "" if pass storage
+// is not configured. Setting LINCTL_PASS_NAME=<entry> opts the user into
+// storing the API key in `pass` instead of the JSON config file.
+func passEntryName() string {
+	return strings.TrimSpace(os.Getenv("LINCTL_PASS_NAME"))
+}
+
+func readFromPass(name string) (string, error) {
+	out, err := exec.Command("pass", "show", name).Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("pass show %s: %s", name, strings.TrimSpace(string(exitErr.Stderr)))
+		}
+		return "", fmt.Errorf("pass show %s: %w", name, err)
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func writeToPass(name, value string) error {
+	cmd := exec.Command("pass", "insert", "-m", "-f", name)
+	cmd.Stdin = strings.NewReader(value + "\n")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("pass insert %s: %s", name, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func removeFromPass(name string) error {
+	out, err := exec.Command("pass", "rm", "-f", name).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("pass rm %s: %s", name, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
 
 type User struct {
 	ID        string `json:"id"`
@@ -72,15 +109,23 @@ func loadAuth() (*AuthConfig, error) {
 	return &config, nil
 }
 
-// GetAuthHeader returns the authorization header value
-// Precedence: LINCTL_API_KEY env var > config file
+// GetAuthHeader returns the authorization header value.
+// Precedence: LINCTL_API_KEY env var > pass(1) (when LINCTL_PASS_NAME set) > config file.
 func GetAuthHeader() (string, error) {
-	// Check environment variable first (useful for CI/CD or temporary overrides)
 	if envKey := strings.TrimSpace(os.Getenv("LINCTL_API_KEY")); envKey != "" {
 		return envKey, nil
 	}
 
-	// Fall back to config file
+	if entry := passEntryName(); entry != "" {
+		key, err := readFromPass(entry)
+		if err != nil {
+			return "", err
+		}
+		if key != "" {
+			return key, nil
+		}
+	}
+
 	config, err := loadAuth()
 	if err != nil {
 		return "", err
@@ -104,9 +149,14 @@ func loginWithAPIKey(plaintext, jsonOut bool) error {
 		fmt.Println("\n" + color.New(color.FgYellow).Sprint("📝 Personal API Key Authentication"))
 		fmt.Println("Get your API key from: https://linear.app/<your-org>/settings/account/security")
 
-		// Get the config path to show to the user
-		configPath, _ := getConfigPath()
-		fmt.Printf("Your credentials will be stored in: %s\n", color.New(color.FgCyan).Sprint(configPath))
+		var location string
+		if entry := passEntryName(); entry != "" {
+			location = fmt.Sprintf("pass entry %q", entry)
+		} else {
+			configPath, _ := getConfigPath()
+			location = configPath
+		}
+		fmt.Printf("Your credentials will be stored in: %s\n", color.New(color.FgCyan).Sprint(location))
 		fmt.Print("\nEnter your Personal API Key: ")
 	}
 
@@ -128,13 +178,14 @@ func loginWithAPIKey(plaintext, jsonOut bool) error {
 		return fmt.Errorf("invalid API key: %v", err)
 	}
 
-	// Save the API key
-	config := AuthConfig{
-		APIKey: apiKey,
-	}
-	err = saveAuth(config)
-	if err != nil {
-		return err
+	if entry := passEntryName(); entry != "" {
+		if err := writeToPass(entry, apiKey); err != nil {
+			return err
+		}
+	} else {
+		if err := saveAuth(AuthConfig{APIKey: apiKey}); err != nil {
+			return err
+		}
 	}
 
 	if !plaintext && !jsonOut {
@@ -169,17 +220,22 @@ func GetCurrentUser() (*User, error) {
 	}, nil
 }
 
-// Logout clears stored credentials
+// Logout clears stored credentials. When LINCTL_PASS_NAME is set, the pass
+// entry is removed; the legacy JSON file is also removed if present so a
+// future re-login starts from a clean slate.
 func Logout() error {
+	if entry := passEntryName(); entry != "" {
+		if err := removeFromPass(entry); err != nil {
+			return err
+		}
+	}
+
 	configPath, err := getConfigPath()
 	if err != nil {
 		return err
 	}
-
-	err = os.Remove(configPath)
-	if err != nil && !os.IsNotExist(err) {
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-
 	return nil
 }
