@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,30 +23,49 @@ func passEntryName() string {
 	return strings.TrimSpace(os.Getenv("LINCTL_PASS_NAME"))
 }
 
+var runPassCommand = func(stdin io.Reader, args ...string) ([]byte, error) {
+	cmd := exec.Command("pass", args...)
+	cmd.Stdin = stdin
+	return cmd.CombinedOutput()
+}
+
 func readFromPass(name string) (string, error) {
-	out, err := exec.Command("pass", "show", name).Output()
+	out, err := runPassCommand(nil, "show", "--", name)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("pass show %s: %s", name, strings.TrimSpace(string(exitErr.Stderr)))
+		if strings.TrimSpace(string(out)) != "" {
+			return "", fmt.Errorf("pass show %s: %s", name, strings.TrimSpace(string(out)))
 		}
 		return "", fmt.Errorf("pass show %s: %w", name, err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		if line := strings.TrimSpace(scanner.Text()); line != "" {
+			return line, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return "", nil
 }
 
 func writeToPass(name, value string) error {
-	cmd := exec.Command("pass", "insert", "-m", "-f", name)
-	cmd.Stdin = strings.NewReader(value + "\n")
-	out, err := cmd.CombinedOutput()
+	out, err := runPassCommand(strings.NewReader(value+"\n"), "insert", "-m", "-f", "--", name)
 	if err != nil {
+		if strings.TrimSpace(string(out)) == "" {
+			return fmt.Errorf("pass insert %s: %w", name, err)
+		}
 		return fmt.Errorf("pass insert %s: %s", name, strings.TrimSpace(string(out)))
 	}
 	return nil
 }
 
 func removeFromPass(name string) error {
-	out, err := exec.Command("pass", "rm", "-f", name).CombinedOutput()
+	out, err := runPassCommand(nil, "rm", "-f", "--", name)
 	if err != nil {
+		if strings.TrimSpace(string(out)) == "" {
+			return fmt.Errorf("pass rm %s: %w", name, err)
+		}
 		return fmt.Errorf("pass rm %s: %s", name, strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -83,6 +104,17 @@ func saveAuth(config AuthConfig) error {
 	}
 
 	return os.WriteFile(configPath, data, 0600)
+}
+
+func removeAuthConfig() error {
+	configPath, err := getConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // loadAuth loads authentication credentials
@@ -182,6 +214,9 @@ func loginWithAPIKey(plaintext, jsonOut bool) error {
 		if err := writeToPass(entry, apiKey); err != nil {
 			return err
 		}
+		if err := removeAuthConfig(); err != nil {
+			return err
+		}
 	} else {
 		if err := saveAuth(AuthConfig{APIKey: apiKey}); err != nil {
 			return err
@@ -224,18 +259,12 @@ func GetCurrentUser() (*User, error) {
 // entry is removed; the legacy JSON file is also removed if present so a
 // future re-login starts from a clean slate.
 func Logout() error {
+	var passErr error
 	if entry := passEntryName(); entry != "" {
 		if err := removeFromPass(entry); err != nil {
-			return err
+			passErr = err
 		}
 	}
 
-	configPath, err := getConfigPath()
-	if err != nil {
-		return err
-	}
-	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	return nil
+	return errors.Join(passErr, removeAuthConfig())
 }
