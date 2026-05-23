@@ -16,7 +16,7 @@ import (
 	"github.com/fatih/color"
 )
 
-// passEntryName returns the pass(1) entry name to use, or "" if pass storage
+// passEntryName returns the pass entry name to use, or "" if pass storage
 // is not configured. Setting LINCTL_PASS_NAME=<entry> opts the user into
 // storing the API key in `pass` instead of the JSON config file.
 func passEntryName() string {
@@ -142,7 +142,7 @@ func loadAuth() (*AuthConfig, error) {
 }
 
 // GetAuthHeader returns the authorization header value.
-// Precedence: LINCTL_API_KEY env var > pass(1) (when LINCTL_PASS_NAME set) > config file.
+// Precedence: LINCTL_API_KEY env var > pass (when LINCTL_PASS_NAME set) > config file.
 func GetAuthHeader() (string, error) {
 	if envKey := strings.TrimSpace(os.Getenv("LINCTL_API_KEY")); envKey != "" {
 		return envKey, nil
