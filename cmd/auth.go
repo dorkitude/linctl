@@ -17,11 +17,16 @@ var authCmd = &cobra.Command{
 	Short: "Authenticate with Linear",
 	Long: `Authenticate with Linear using Personal API Key.
 
+By default, linctl stores credentials in ~/.linctl-auth.json. Users of the
+external pass(1) password manager can opt in by setting LINCTL_PASS_NAME to the
+desired pass entry name before running auth commands.
+
 Examples:
   linctl auth              # Interactive authentication
   linctl auth login        # Same as above
   linctl auth status       # Check authentication status
-  linctl auth logout       # Clear stored credentials`,
+  linctl auth logout       # Clear stored credentials
+  LINCTL_PASS_NAME=linear-api-key linctl auth`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Default behavior is to run login
 		loginCmd.Run(cmd, args)
@@ -31,7 +36,11 @@ Examples:
 var loginCmd = &cobra.Command{
 	Use:   "login",
 	Short: "Login to Linear",
-	Long:  `Authenticate with Linear using Personal API Key.`,
+	Long: `Authenticate with Linear using Personal API Key.
+
+By default, linctl stores credentials in ~/.linctl-auth.json. Users of the
+external pass(1) password manager can opt in by setting LINCTL_PASS_NAME to the
+desired pass entry name.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -101,7 +110,10 @@ var statusCmd = &cobra.Command{
 var logoutCmd = &cobra.Command{
 	Use:   "logout",
 	Short: "Logout from Linear",
-	Long:  `Clear stored Linear credentials.`,
+	Long: `Clear stored Linear credentials.
+
+By default, this removes ~/.linctl-auth.json. When LINCTL_PASS_NAME is set,
+linctl also removes that pass(1) entry.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
