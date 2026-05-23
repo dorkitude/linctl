@@ -32,6 +32,12 @@ brew install linctl
 linctl docs      # Render the README.md
 ```
 
+### Nix
+```bash
+nix profile install github:dorkitude/linctl
+linctl docs      # Render the README.md
+```
+
 ### From Source
 ```bash
 git clone https://github.com/dorkitude/linctl.git
