@@ -8,7 +8,7 @@ Ship safe, small, tested changes to `linctl` with docs that match behavior.
 - Prefer `rg`/`go test`/existing scripts; do not invent parallel tooling.
 - Never rewrite user-authored history (`reset --hard`, force-push) unless explicitly requested.
 - If behavior changes, update docs in the same PR (`README.md`, `SKILL.md`,  as needed).
-- If a change updates release versioning, do not consider it complete until Homebrew tap bump status is verified.
+- If a change updates release versioning, do not consider it complete until Homebrew tap bump status and Nix installability are verified.
 
 ## Quality Bar
 - Run: `go test ./...` before finalizing code changes.
@@ -27,10 +27,12 @@ Ship safe, small, tested changes to `linctl` with docs that match behavior.
 - `linctl --help`
 - `go test ./...`
 
-## Release + Homebrew (Owners Only)
+## Release + Package Managers (Owners Only)
 - Owners cut releases from `master` using semver tags `vX.Y.Z`.
 - Required for auto Homebrew bump: repo secret `HOMEBREW_TAP_TOKEN` (write access to `dorkitude/homebrew-linctl`).
-- Version bump policy: release/version bumps must include Homebrew verification in the same workstream (auto workflow success or merged manual tap bump PR).
+- Version bump policy: release/version bumps must include Homebrew and Nix verification in the same workstream.
+  - Homebrew verification means auto workflow success plus merged tap PR, or a merged manual tap bump PR.
+  - Nix verification means the flake builds from the release tag, or the blocker is explicitly documented when Nix is unavailable in the release environment.
 - Flow:
   1. `git push origin master`
   2. `git tag -a vX.Y.Z -m "vX.Y.Z: <summary>" && git push origin vX.Y.Z`
@@ -38,3 +40,7 @@ Ship safe, small, tested changes to `linctl` with docs that match behavior.
   4. Verify `Bump Homebrew Tap` workflow succeeds.
   5. Merge bump PR in `dorkitude/homebrew-linctl` (close stale bump PRs).
   6. Confirm formula points to new tag+sha and `brew upgrade linctl` resolves.
+  7. Confirm Nix installability from the tag:
+     `nix build github:dorkitude/linctl/vX.Y.Z`
+     `nix profile install github:dorkitude/linctl/vX.Y.Z`
+     `linctl --version`
