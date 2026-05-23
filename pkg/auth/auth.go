@@ -4,14 +4,72 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/dorkitude/linctl/pkg/api"
 	"github.com/fatih/color"
 )
+
+// passEntryName returns the pass entry name to use, or "" if pass storage
+// is not configured. Setting LINCTL_PASS_NAME=<entry> opts the user into
+// storing the API key in `pass` instead of the JSON config file.
+func passEntryName() string {
+	return strings.TrimSpace(os.Getenv("LINCTL_PASS_NAME"))
+}
+
+var runPassCommand = func(stdin io.Reader, args ...string) ([]byte, error) {
+	cmd := exec.Command("pass", args...)
+	cmd.Stdin = stdin
+	return cmd.CombinedOutput()
+}
+
+func readFromPass(name string) (string, error) {
+	out, err := runPassCommand(nil, "show", "--", name)
+	if err != nil {
+		if strings.TrimSpace(string(out)) != "" {
+			return "", fmt.Errorf("pass show %s: %s", name, strings.TrimSpace(string(out)))
+		}
+		return "", fmt.Errorf("pass show %s: %w", name, err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	for scanner.Scan() {
+		if line := strings.TrimSpace(scanner.Text()); line != "" {
+			return line, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return "", nil
+}
+
+func writeToPass(name, value string) error {
+	out, err := runPassCommand(strings.NewReader(value+"\n"), "insert", "-m", "-f", "--", name)
+	if err != nil {
+		if strings.TrimSpace(string(out)) == "" {
+			return fmt.Errorf("pass insert %s: %w", name, err)
+		}
+		return fmt.Errorf("pass insert %s: %s", name, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func removeFromPass(name string) error {
+	out, err := runPassCommand(nil, "rm", "-f", "--", name)
+	if err != nil {
+		if strings.TrimSpace(string(out)) == "" {
+			return fmt.Errorf("pass rm %s: %w", name, err)
+		}
+		return fmt.Errorf("pass rm %s: %s", name, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
 
 type User struct {
 	ID        string `json:"id"`
@@ -48,6 +106,17 @@ func saveAuth(config AuthConfig) error {
 	return os.WriteFile(configPath, data, 0600)
 }
 
+func removeAuthConfig() error {
+	configPath, err := getConfigPath()
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
 // loadAuth loads authentication credentials
 func loadAuth() (*AuthConfig, error) {
 	configPath, err := getConfigPath()
@@ -72,15 +141,23 @@ func loadAuth() (*AuthConfig, error) {
 	return &config, nil
 }
 
-// GetAuthHeader returns the authorization header value
-// Precedence: LINCTL_API_KEY env var > config file
+// GetAuthHeader returns the authorization header value.
+// Precedence: LINCTL_API_KEY env var > pass (when LINCTL_PASS_NAME set) > config file.
 func GetAuthHeader() (string, error) {
-	// Check environment variable first (useful for CI/CD or temporary overrides)
 	if envKey := strings.TrimSpace(os.Getenv("LINCTL_API_KEY")); envKey != "" {
 		return envKey, nil
 	}
 
-	// Fall back to config file
+	if entry := passEntryName(); entry != "" {
+		key, err := readFromPass(entry)
+		if err != nil {
+			return "", err
+		}
+		if key != "" {
+			return key, nil
+		}
+	}
+
 	config, err := loadAuth()
 	if err != nil {
 		return "", err
@@ -104,9 +181,14 @@ func loginWithAPIKey(plaintext, jsonOut bool) error {
 		fmt.Println("\n" + color.New(color.FgYellow).Sprint("📝 Personal API Key Authentication"))
 		fmt.Println("Get your API key from: https://linear.app/<your-org>/settings/account/security")
 
-		// Get the config path to show to the user
-		configPath, _ := getConfigPath()
-		fmt.Printf("Your credentials will be stored in: %s\n", color.New(color.FgCyan).Sprint(configPath))
+		var location string
+		if entry := passEntryName(); entry != "" {
+			location = fmt.Sprintf("pass entry %q", entry)
+		} else {
+			configPath, _ := getConfigPath()
+			location = configPath
+		}
+		fmt.Printf("Your credentials will be stored in: %s\n", color.New(color.FgCyan).Sprint(location))
 		fmt.Print("\nEnter your Personal API Key: ")
 	}
 
@@ -128,13 +210,17 @@ func loginWithAPIKey(plaintext, jsonOut bool) error {
 		return fmt.Errorf("invalid API key: %v", err)
 	}
 
-	// Save the API key
-	config := AuthConfig{
-		APIKey: apiKey,
-	}
-	err = saveAuth(config)
-	if err != nil {
-		return err
+	if entry := passEntryName(); entry != "" {
+		if err := writeToPass(entry, apiKey); err != nil {
+			return err
+		}
+		if err := removeAuthConfig(); err != nil {
+			return err
+		}
+	} else {
+		if err := saveAuth(AuthConfig{APIKey: apiKey}); err != nil {
+			return err
+		}
 	}
 
 	if !plaintext && !jsonOut {
@@ -169,17 +255,16 @@ func GetCurrentUser() (*User, error) {
 	}, nil
 }
 
-// Logout clears stored credentials
+// Logout clears stored credentials. When LINCTL_PASS_NAME is set, the pass
+// entry is removed; the legacy JSON file is also removed if present so a
+// future re-login starts from a clean slate.
 func Logout() error {
-	configPath, err := getConfigPath()
-	if err != nil {
-		return err
+	var passErr error
+	if entry := passEntryName(); entry != "" {
+		if err := removeFromPass(entry); err != nil {
+			passErr = err
+		}
 	}
 
-	err = os.Remove(configPath)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	return nil
+	return errors.Join(passErr, removeAuthConfig())
 }

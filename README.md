@@ -5,7 +5,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
 
 ## Features
 
-- **Authentication**: personal API key auth (`linctl auth`) and env-var override support.
+- **Authentication**: personal API key auth (`linctl auth`), env-var override, and optional [`pass`](https://www.passwordstore.org/) credential storage.
 - **Issues**: list/search/get/create/update/assign with support for:
   - cycles, labels, delegation, projects/milestones, parent/sub-issue links
   - due dates, attachments, comments, and rich issue detail output
@@ -746,7 +746,9 @@ api:
   retries: 3
 ```
 
-Authentication credentials are stored securely in `~/.linctl-auth.json`.
+By default, authentication credentials are stored in `~/.linctl-auth.json`.
+Users of the external [`pass`](https://www.passwordstore.org/) password manager
+can opt in to GPG-backed credential storage with `LINCTL_PASS_NAME`.
 
 ## Authentication
 
@@ -774,7 +776,28 @@ linctl whoami
 unset LINCTL_API_KEY
 ```
 
-Precedence: `LINCTL_API_KEY` environment variable > config file (`~/.linctl-auth.json`).
+### Storing the Key in `pass` (Optional)
+
+If you already use the external [`pass`](https://www.passwordstore.org/)
+password manager, set `LINCTL_PASS_NAME` to the entry name and `linctl` will
+read/write the key through `pass` instead of the JSON config file. If
+`LINCTL_PASS_NAME` is unset, this feature is disabled and existing auth behavior
+is unchanged.
+
+```bash
+# One-time setup
+export LINCTL_PASS_NAME=linear-api-key
+linctl auth                       # stores via `pass insert -m -f -- linear-api-key`
+
+# Subsequent calls just work
+linctl whoami
+```
+
+`linctl logout` removes the entry via `pass rm -f -- linear-api-key` and also
+removes any legacy `~/.linctl-auth.json` file if one exists.
+
+Precedence: `LINCTL_API_KEY` environment variable > `pass` (when
+`LINCTL_PASS_NAME` is set) > config file (`~/.linctl-auth.json`).
 
 ## Time-based Filtering
 
