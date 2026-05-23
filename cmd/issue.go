@@ -2023,7 +2023,9 @@ func downloadAttachmentEntry(ctx context.Context, authHeader string, entry issue
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("Authorization", authHeader)
+	if shouldSendAttachmentAuthHeader(entry.URL) {
+		req.Header.Set("Authorization", authHeader)
+	}
 	req.Header.Set("User-Agent", "linctl/0.1.0")
 
 	client := &http.Client{}
@@ -2063,6 +2065,14 @@ func downloadAttachmentEntry(ctx context.Context, authHeader string, entry issue
 		return targetPath, nil
 	}
 	return absPath, nil
+}
+
+func shouldSendAttachmentAuthHeader(rawURL string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(parsed.Host, "uploads.linear.app")
 }
 
 func resolveDownloadFilename(resp *http.Response, entry issueAttachmentEntry) string {

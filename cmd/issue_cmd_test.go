@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -190,6 +193,41 @@ func TestHasAttachmentDownloadFailuresIgnoresSkipped(t *testing.T) {
 	results = append(results, issueAttachmentDownloadResult{Status: "failed", Success: false})
 	if !hasAttachmentDownloadFailures(results) {
 		t.Fatalf("failed entries must count as failures")
+	}
+}
+
+func TestDownloadAttachmentEntryDoesNotSendAuthToExternalURL(t *testing.T) {
+	var sawAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sawAuth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Disposition", `attachment; filename="external.txt"`)
+		_, _ = w.Write([]byte("file contents"))
+	}))
+	defer server.Close()
+
+	outputDir := t.TempDir()
+	filePath, err := downloadAttachmentEntry(context.Background(), "linear-secret", issueAttachmentEntry{
+		Title:  "external.txt",
+		URL:    server.URL + "/external.txt",
+		Source: "attachment",
+	}, outputDir, "")
+	if err != nil {
+		t.Fatalf("downloadAttachmentEntry returned error: %v", err)
+	}
+	if sawAuth != "" {
+		t.Fatalf("expected no Authorization header for external URL, got %q", sawAuth)
+	}
+	if _, err := os.Stat(filePath); err != nil {
+		t.Fatalf("expected downloaded file at %s: %v", filePath, err)
+	}
+}
+
+func TestShouldSendAttachmentAuthHeaderOnlyForLinearUploads(t *testing.T) {
+	if !shouldSendAttachmentAuthHeader("https://uploads.linear.app/path/file.md") {
+		t.Fatalf("expected auth header for uploads.linear.app")
+	}
+	if shouldSendAttachmentAuthHeader("https://example.com/path/file.md") {
+		t.Fatalf("expected no auth header for external host")
 	}
 }
 
