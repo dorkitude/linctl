@@ -1,6 +1,6 @@
 ---
 name: linctl
-description: Use linctl to read and update Linear issues, projects, teams, users, labels, comments, and agent sessions from the terminal. Prefer JSON reads, validate auth first, and use command-specific --help for exact flags.
+description: Use linctl to read and update Linear issues, projects, initiatives, teams, users, labels, comments, and agent sessions from the terminal. Prefer JSON reads, validate auth first, and use command-specific --help for exact flags.
 ---
 
 # linctl Agent Guide
@@ -46,6 +46,7 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 
 - Issues: `linctl issue ...`
 - Projects: `linctl project ...`
+- Initiatives: `linctl initiative ...` (list, get, create, update, delete, archive, unarchive, link, unlink)
 - Teams: `linctl team ...` (includes `state list` and `state update`)
 - Users: `linctl user ...` and `linctl whoami`
 - Comments: `linctl comment ...`
@@ -82,6 +83,11 @@ linctl agent <ISSUE_ID> --json
 linctl mcp sync
 linctl mcp tools --json
 linctl mcp call query.viewer
+
+# Initiative inventory
+linctl initiative list --json
+linctl initiative list --include-completed --json
+linctl initiative get <INITIATIVE_ID> --json
 ```
 
 ## Suggested Write Patterns
@@ -121,6 +127,14 @@ linctl team state update <STATE_ID> --name "Ready"
 
 # Mention delegated/active agent with message
 linctl agent mention LIN-123 "Please pick this up."
+
+# Initiative lifecycle
+linctl initiative create --name "Q3 Goals" --owner me --status Active
+linctl initiative update <INIT_ID> --target-date 2026-12-31
+linctl initiative link <INIT_ID> --project <PROJECT_ID>
+linctl initiative unlink <INIT_ID> --project <PROJECT_ID>
+linctl initiative archive <INIT_ID>
+linctl initiative unarchive <INIT_ID>
 ```
 
 ## Troubleshooting
@@ -146,5 +160,6 @@ linctl user --help
 linctl comment --help
 linctl label --help
 linctl agent --help
+linctl initiative --help
 linctl auth --help
 ```
