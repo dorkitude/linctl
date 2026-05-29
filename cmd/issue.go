@@ -971,6 +971,7 @@ func isUnsetValue(value string) bool {
 	}
 }
 
+
 func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
 	normalized := strings.TrimSpace(value)
 	if normalized == "" {
@@ -1068,6 +1069,7 @@ Examples:
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform"
   linctl issue create --title "Fix bug" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
   linctl issue create --title "Fix bug" --team ENG --state "In Progress"
+  linctl issue create --title "Fix bug" --team ENG --estimate 3
   linctl issue create --title "Fix bug" --team ENG --delegate agent-user
   linctl issue create --title "Fix bug" --team ENG --labels bug,urgent`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -1122,6 +1124,11 @@ Examples:
 
 		if priority >= 0 && priority <= 4 {
 			input["priority"] = priority
+		}
+
+		if cmd.Flags().Changed("estimate") {
+			estimate, _ := cmd.Flags().GetInt("estimate")
+			input["estimate"] = estimate
 		}
 
 		if assignToMe {
@@ -1270,6 +1277,7 @@ Examples:
   linctl issue update LIN-123 --assignee john.doe@company.com
   linctl issue update LIN-123 --state "In Progress"
   linctl issue update LIN-123 --priority 1
+  linctl issue update LIN-123 --estimate 5
   linctl issue update LIN-123 --due-date "2024-12-31"
   linctl issue update LIN-123 --project "Q1 Platform"
   linctl issue update LIN-123 --project "Q1 Platform" --project-milestone "Phase 1"
@@ -1401,6 +1409,12 @@ Examples:
 		if cmd.Flags().Changed("priority") {
 			priority, _ := cmd.Flags().GetInt("priority")
 			input["priority"] = priority
+		}
+
+		// Handle estimate update
+		if cmd.Flags().Changed("estimate") {
+			estimate, _ := cmd.Flags().GetInt("estimate")
+			input["estimate"] = estimate
 		}
 
 		// Handle due date update
@@ -2433,6 +2447,7 @@ func init() {
 	issueCreateCmd.Flags().String("project", "", "Project name or ID to assign the issue to")
 	issueCreateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (requires --project)")
 	issueCreateCmd.Flags().StringSlice("labels", []string{}, "Labels to assign (names or IDs, comma-separated)")
+	issueCreateCmd.Flags().IntP("estimate", "e", -1, "Estimate points (value depends on team's estimation system)")
 	_ = issueCreateCmd.MarkFlagRequired("title")
 	_ = issueCreateCmd.MarkFlagRequired("team")
 
@@ -2449,6 +2464,7 @@ func init() {
 	issueUpdateCmd.Flags().String("project-milestone", "", "Project milestone name or ID (or 'none' to remove milestone)")
 	issueUpdateCmd.Flags().StringSlice("labels", []string{}, "Replace labels with provided names or IDs (comma-separated)")
 	issueUpdateCmd.Flags().Bool("clear-labels", false, "Remove all labels from the issue")
+	issueUpdateCmd.Flags().IntP("estimate", "e", -1, "Estimate points (value depends on team's estimation system)")
 
 	// Issue attach flags
 	issueAttachCmd.Flags().String("pr", "", "GitHub pull request URL or numeric PR number")

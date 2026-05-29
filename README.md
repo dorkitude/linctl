@@ -1,6 +1,5 @@
 # linctl
 
-
 A command-line interface for the Linear API, built with Go and Cobra.
 
 ## Features
@@ -26,6 +25,7 @@ A command-line interface for the Linear API, built with Go and Cobra.
 ## Installation
 
 ### Homebrew (macOS/Linux)
+
 ```bash
 brew tap dorkitude/linctl
 brew install linctl
@@ -33,12 +33,14 @@ linctl docs      # Render the README.md
 ```
 
 ### Nix
+
 ```bash
 nix profile install github:dorkitude/linctl
 linctl docs      # Render the README.md
 ```
 
 ### From Source
+
 ```bash
 git clone https://github.com/dorkitude/linctl.git
 cd linctl
@@ -49,6 +51,7 @@ linctl docs      # Render the README.md
 ```
 
 ### For Development
+
 ```bash
 git clone https://github.com/dorkitude/linctl.git
 cd linctl
@@ -64,21 +67,23 @@ linctl docs      # Render the README.md
 ## Important: Default Filters
 
 **By default, `issue list`, `issue search`, and `project list` commands only show items created in the last 6 months!**
- 
+
 This improves performance and prevents overwhelming data loads. To see older items:
- - Use `--newer-than 1_year_ago` for items from the last year
- - Use `--newer-than all_time` to see ALL items ever created
- - See the [Time-based Filtering](#-time-based-filtering) section for details
+
+- Use `--newer-than 1_year_ago` for items from the last year
+- Use `--newer-than all_time` to see ALL items ever created
+- See the [Time-based Filtering](#-time-based-filtering) section for details
 
 **By default, `issue list` and `issue search` also filter out canceled and completed items. To see all items, use the `--include-completed` flag.**
-- Need archived matches? Add `--include-archived` when using `issue search`.
 
+- Need archived matches? Add `--include-archived` when using `issue search`.
 
 ## Quick Start
 
-> **IMPORTANT**  Agents like Claude Code, Cursor, and Gemini should use the `--json` flag on all read operations.
+> **IMPORTANT** Agents like Claude Code, Cursor, and Gemini should use the `--json` flag on all read operations.
 
 ### 1. Authentication
+
 ```bash
 # Interactive authentication
 linctl auth
@@ -94,6 +99,7 @@ linctl docs | less
 ```
 
 ### 2. Issue Management
+
 ```bash
 # List all issues
 linctl issue list
@@ -133,6 +139,7 @@ linctl issue create --title "Bug fix" --team ENG
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform"
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
 linctl issue create --title "Bug fix" --team ENG --state "In Progress"
+linctl issue create --title "Bug fix" --team ENG --estimate 3
 linctl issue create --title "Bug fix" --team ENG --labels bug,urgent
 linctl issue create --title "Bug fix" --team ENG --delegate agent-runner
 
@@ -147,6 +154,7 @@ linctl issue update LIN-123 --assignee me  # Assign to yourself
 linctl issue update LIN-123 --assignee unassigned  # Remove assignee
 linctl issue update LIN-123 --state "In Progress"
 linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
+linctl issue update LIN-123 --estimate 5  # Value depends on team estimation system
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
 linctl issue update LIN-123 --project "Q1 Platform"
@@ -193,6 +201,7 @@ linctl issue relation remove RELATION-ID        # Use ID from relation list
 ```
 
 ### 3. Project Management
+
 ```bash
 # List all projects (shows IDs)
 linctl project list
@@ -221,6 +230,7 @@ linctl project delete PROJECT-ID --permanent --force
 ```
 
 ### 4. Team Management
+
 ```bash
 # List all teams
 linctl team list
@@ -239,6 +249,7 @@ linctl team state update STATE-ID --name "Ready" --color "#abc"
 ```
 
 ### 5. User Management
+
 ```bash
 # List all users
 linctl user list
@@ -254,6 +265,7 @@ linctl user me
 ```
 
 ### 6. Comments
+
 ```bash
 # List comments on an issue
 linctl comment list LIN-123
@@ -268,6 +280,7 @@ linctl comment delete COMMENT-ID
 ```
 
 ### 7. Label Management
+
 ```bash
 # List labels for a team
 linctl label list --team ENG
@@ -287,6 +300,7 @@ linctl label delete LABEL-ID
 ```
 
 ### 8. Agent Sessions
+
 ```bash
 # View delegated/agent session state for an issue
 linctl agent ENG-80
@@ -299,6 +313,7 @@ linctl agent mention ENG-80 --agent agent-runner "Please rerun tests"
 ```
 
 ### 9. Raw GraphQL (API Escape Hatch)
+
 ```bash
 # Direct query
 linctl graphql 'query { viewer { id name email } }'
@@ -317,6 +332,7 @@ cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
 ```
 
 ### 10. Dynamic MCP Tools (Schema-Driven)
+
 ```bash
 # Sync cache from live schema introspection (12h TTL)
 linctl mcp sync
@@ -337,12 +353,14 @@ linctl mcp call query.issue --json '{"id":"LIN-123"}' --selection '{ id identifi
 ## Command Reference
 
 ### Global Flags
+
 - `--plaintext, -p`: Plain text output (non-interactive)
 - `--json, -j`: JSON output for scripting
 - `--help, -h`: Show help
 - `--version, -v`: Show version
 
 ### Authentication Commands
+
 ```bash
 linctl auth               # Interactive authentication
 linctl auth login         # Same as above
@@ -352,6 +370,7 @@ linctl whoami            # Show current user
 ```
 
 ### GraphQL Command
+
 ```bash
 # Execute raw GraphQL operation
 linctl graphql [query] [flags]
@@ -364,6 +383,7 @@ linctl graphql [query] [flags]
 ```
 
 ### MCP Commands
+
 ```bash
 # Refresh cache of dynamic tools discovered from Linear schema
 linctl mcp sync
@@ -380,6 +400,7 @@ linctl mcp call <tool-name> [flags]
 ```
 
 ### Issue Commands
+
 ```bash
 # List issues with filters
 linctl issue list [flags]
@@ -411,6 +432,7 @@ linctl issue new [flags]      # Alias
   -d, --description string Issue description
   -t, --team string        Team key (required)
   --priority int       Priority 0-4 (default 3)
+  -e, --estimate int   Estimate points (depends on team's estimation system)
   -m, --assign-me          Assign to yourself
   -s, --state string       State name (e.g., 'Todo', 'In Progress')
   --delegate string        Delegate to user/agent (email, name, or displayName)
@@ -430,6 +452,7 @@ linctl issue edit <issue-id> [flags]    # Alias
   -a, --assignee string    Assignee (email, name, 'me', or 'unassigned')
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
+  -e, --estimate int       Estimate points (depends on team's estimation system)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
   --delegate string        Delegate to user/agent (email, name, displayName, or 'none' to remove)
   --labels strings         Replace labels with provided names or IDs (comma-separated)
@@ -463,6 +486,7 @@ linctl issue attachment download <issue-id> [flags]
 ```
 
 ### Issue Relation Commands
+
 ```bash
 # List all relations for an issue
 linctl issue relation list <issue-id>
@@ -490,6 +514,7 @@ linctl issue relation list LIN-123 -j                    # JSON output for scrip
 ```
 
 ### Agent Commands
+
 ```bash
 # View agent delegation/session for an issue
 linctl agent <issue-id>
@@ -501,6 +526,7 @@ linctl agent mention <issue-id> <message...>
 ```
 
 ### Team Commands
+
 ```bash
 # List all teams with issue counts
 linctl team list
@@ -537,6 +563,7 @@ linctl team state update abc123 --name "Ready" --color "#00ff00"
 ```
 
 ### Project Commands
+
 ```bash
 # List projects
 linctl project list [flags]
@@ -587,6 +614,7 @@ linctl project remove <project-id> [flags]
 ```
 
 ### User Commands
+
 ```bash
 # List all users in workspace
 linctl user list [flags]
@@ -613,6 +641,7 @@ linctl user me              # Shows your profile with admin status
 ```
 
 ### Comment Commands
+
 ```bash
 # List all comments for an issue
 linctl comment list <issue-id> [flags]
@@ -645,6 +674,7 @@ linctl comment create LIN-456 --body "@john please review this PR"
 ```
 
 ### Label Commands
+
 ```bash
 # List labels for a team
 linctl label list --team <team-key>
@@ -679,9 +709,11 @@ linctl label remove <label-id>         # Alias
 ## Output Formats
 
 ### Table Format (Default)
+
 ```bash
 linctl issue list
 ```
+
 ```
 ID       Title                State        Assignee    Team  Priority
 LIN-123  Fix authentication   In Progress  john@co.com ENG   High
@@ -689,9 +721,11 @@ LIN-124  Update documentation Done         jane@co.com DOC   Normal
 ```
 
 ### Plaintext Format
+
 ```bash
 linctl issue list --plaintext
 ```
+
 ```
 # Issues
 ## BUG: Fix login button alignment
@@ -719,9 +753,11 @@ Steps to reproduce:
 ```
 
 ### JSON Format
+
 ```bash
 linctl issue list --json
 ```
+
 ```json
 [
   {
@@ -759,6 +795,7 @@ can opt in to GPG-backed credential storage with `LINCTL_PASS_NAME`.
 ## Authentication
 
 ### Personal API Key (Recommended)
+
 1. Go to [Linear Settings > Security & Access](https://linear.app/<your-org>/settings/account/security)
 2. Scroll to **Personal API keys** and create a new key
 3. Run `linctl auth` and paste your key
@@ -766,6 +803,7 @@ can opt in to GPG-backed credential storage with `LINCTL_PASS_NAME`.
 ### Temporary Override (Current Session)
 
 You can temporarily override stored credentials using the `LINCTL_API_KEY` environment variable. This is useful for:
+
 - CI/CD pipelines
 - Testing with a different account
 - One-off commands without modifying `~/.linctl-auth.json`
@@ -839,18 +877,18 @@ linctl issue list --newer-than all_time
 
 ### Quick Reference
 
-| Time Expression | Description | Example Command |
-|----------------|-------------|-----------------|
-| *(no flag)* | Last 6 months (default) | `linctl issue list` |
-| `1_day_ago` | Last 24 hours | `linctl issue list --newer-than 1_day_ago` |
-| `1_week_ago` | Last 7 days | `linctl issue list --newer-than 1_week_ago` |
-| `2_weeks_ago` | Last 14 days | `linctl issue list --newer-than 2_weeks_ago` |
-| `1_month_ago` | Last month | `linctl issue list --newer-than 1_month_ago` |
-| `3_months_ago` | Last quarter | `linctl issue list --newer-than 3_months_ago` |
-| `6_months_ago` | Last 6 months | `linctl issue list --newer-than 6_months_ago` |
-| `1_year_ago` | Last year | `linctl issue list --newer-than 1_year_ago` |
-| `all_time` | No date filter | `linctl issue list --newer-than all_time` |
-| `2025-07-01` | Since specific date | `linctl issue list --newer-than 2025-07-01` |
+| Time Expression | Description             | Example Command                               |
+| --------------- | ----------------------- | --------------------------------------------- |
+| _(no flag)_     | Last 6 months (default) | `linctl issue list`                           |
+| `1_day_ago`     | Last 24 hours           | `linctl issue list --newer-than 1_day_ago`    |
+| `1_week_ago`    | Last 7 days             | `linctl issue list --newer-than 1_week_ago`   |
+| `2_weeks_ago`   | Last 14 days            | `linctl issue list --newer-than 2_weeks_ago`  |
+| `1_month_ago`   | Last month              | `linctl issue list --newer-than 1_month_ago`  |
+| `3_months_ago`  | Last quarter            | `linctl issue list --newer-than 3_months_ago` |
+| `6_months_ago`  | Last 6 months           | `linctl issue list --newer-than 6_months_ago` |
+| `1_year_ago`    | Last year               | `linctl issue list --newer-than 1_year_ago`   |
+| `all_time`      | No date filter          | `linctl issue list --newer-than all_time`     |
+| `2025-07-01`    | Since specific date     | `linctl issue list --newer-than 2025-07-01`   |
 
 ### Common Use Cases
 
@@ -883,6 +921,7 @@ All list commands support sorting with the `--sort` or `-o` flag:
 - **updated**: Sort by last update date (most recently updated first)
 
 ### Examples
+
 ```bash
 # Get recently updated issues
 linctl issue list --sort updated
@@ -966,6 +1005,7 @@ linctl comment list LIN-123 --json > issue-comments.json
 ## Real-World Examples
 
 ### Team Workflows
+
 ```bash
 # Find which team a user belongs to
 for team in $(linctl team list --json | jq -r '.[].key'); do
@@ -981,6 +1021,7 @@ linctl team list --json | jq '.[] | select(.issueCount > 50) | {key, name, issue
 ```
 
 ### User Management
+
 ```bash
 # Find inactive users
 linctl user list --json | jq '.[] | select(.active == false) | {name, email}'
@@ -993,6 +1034,7 @@ linctl user list --json | jq '.[] | select(.admin == true and .isMe == false) | 
 ```
 
 ### Issue Comments
+
 ```bash
 # Add a comment mentioning the issue is blocked
 linctl comment create LIN-123 --body "Blocked by LIN-456. Waiting for API changes."
@@ -1008,6 +1050,7 @@ done
 ```
 
 ### Project Tracking
+
 ```bash
 # List projects nearing completion (>80% progress)
 linctl project list --json | jq '.[] | select(.progress > 0.8) | {name, progress}'
@@ -1020,6 +1063,7 @@ linctl project get PROJECT-ID --json | jq '{name, startDate, targetDate, progres
 ```
 
 ### Daily Standup Helper
+
 ```bash
 #!/bin/bash
 # Show my recent activity
@@ -1036,6 +1080,7 @@ done
 ## Troubleshooting
 
 ### Authentication Issues
+
 ```bash
 # Check authentication status
 linctl auth status
@@ -1046,15 +1091,19 @@ linctl auth
 ```
 
 ### API Rate Limits
+
 Linear has the following rate limits:
+
 - Personal API Keys: 5,000 requests/hour
 
 ### Common Errors
+
 - `Not authenticated`: Run `linctl auth` first
 - `Team not found`: Use team key (e.g., "ENG") not display name
 - `Invalid priority`: Use numbers 0-4 (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
 
 ### Time Filtering Issues
+
 - **Missing old issues?** Remember that list commands default to showing only the last 6 months
   - Solution: Use `--newer-than all_time` to see all issues
 - **Invalid time expression?** Check the format: `N_units_ago` (e.g., `3_weeks_ago`)
