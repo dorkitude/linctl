@@ -245,3 +245,12 @@ func TestIssueAttachmentFlagsRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestEstimateFlagRegistered(t *testing.T) {
+	if issueCreateCmd.Flags().Lookup("estimate") == nil {
+		t.Fatal("issue create is missing --estimate flag")
+	}
+	if issueUpdateCmd.Flags().Lookup("estimate") == nil {
+		t.Fatal("issue update is missing --estimate flag")
+	}
+}
