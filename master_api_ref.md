@@ -5,6 +5,7 @@ Comprehensive, practical reference for Linear's GraphQL API and how `linctl` map
 Last verified against official docs: March 1, 2026.
 
 ## Canonical Sources
+
 - Developers hub: https://linear.app/developers
 - GraphQL endpoint: `https://api.linear.app/graphql`
 - Schema explorer: https://studio.apollographql.com/public/Linear-API/variant/current/explorer
@@ -13,16 +14,20 @@ Last verified against official docs: March 1, 2026.
 ## 1) Authentication
 
 ### Personal API key (common for CLI)
+
 - Header format: `Authorization: <API_KEY>`
 - Good fit for local automation and operators.
 
 ### OAuth 2.0
+
 - Header format: `Authorization: Bearer <ACCESS_TOKEN>`
 - Supported grants include user authorization flow and app-actor flow (`actor=app`).
 - Modern app capabilities include app actor tokens and app scopes.
 
 ### Current scope model (OAuth)
+
 Common scopes (workspace-specific):
+
 - `read`
 - `write`
 - `issues:create`
@@ -33,38 +38,50 @@ Common scopes (workspace-specific):
 - `app:mentionable`
 
 Notes:
+
 - Older scope lists like `issues:write` / `teams:read` are stale.
 - For older apps, follow OAuth migration guidance (refresh-token / actor updates) in the official docs.
 
 ## 2) GraphQL Conventions
 
 ### Endpoint
+
 ```text
 https://api.linear.app/graphql
 ```
 
 ### Introspection
+
 ```graphql
 query IntrospectionQuery {
   __schema {
-    queryType { name }
-    mutationType { name }
-    types { name }
+    queryType {
+      name
+    }
+    mutationType {
+      name
+    }
+    types {
+      name
+    }
   }
 }
 ```
 
 ### IDs, keys, identifiers
+
 - Most node lookups accept a Linear ID (`id`).
 - Some API paths use domain keys/identifiers (for example team key like `ENG`, issue identifier like `ENG-123`) after resolving via query logic.
 - In `linctl`, user-facing commands often accept keys/identifiers and resolve IDs internally.
 
 ### Pagination pattern
+
 - Connections use cursor pagination.
 - Standard args: `first`, `after`, `last`, `before`.
 - Standard response: `nodes` + `pageInfo { hasNextPage endCursor ... }`.
 
 ### Filtering + sorting
+
 - Filtering is typed per resource (`IssueFilter`, `ProjectFilter`, etc.).
 - Sorting is typed per resource (`IssueOrderBy`, `ProjectOrderBy`, `TeamOrderBy`, `UserOrderBy`, `CommentOrderBy`).
 - Do not assume global `PaginationOrderBy` for every query.
@@ -74,12 +91,14 @@ query IntrospectionQuery {
 Linear enforces both request-count and complexity budgets.
 
 ### Request budgets
+
 - API key: 5,000 requests/hour
 - OAuth key: 5,000 requests/hour
 - Unauthenticated: 60 requests/hour
 - Endpoint burst protection: 30 requests/minute per endpoint
 
 ### Complexity budgets
+
 - Max single request complexity: 10,000
 - API key hourly complexity budget: 3,000,000
 - OAuth hourly complexity budget: 2,000,000
@@ -88,17 +107,21 @@ Linear enforces both request-count and complexity budgets.
 Always trust live response headers for enforcement details in your workspace.
 
 ### Key response headers
+
 Request-based:
+
 - `X-RateLimit-Requests-Limit`
 - `X-RateLimit-Requests-Remaining`
 - `X-RateLimit-Requests-Reset`
 
 Complexity-based:
+
 - `X-RateLimit-Complexity-Limit`
 - `X-RateLimit-Complexity-Remaining`
 - `X-RateLimit-Complexity-Reset`
 
 Endpoint-specific (when applicable):
+
 - `X-RateLimit-Endpoint-Requests-Limit`
 - `X-RateLimit-Endpoint-Requests-Remaining`
 - `X-RateLimit-Endpoint-Requests-Reset`
@@ -108,6 +131,7 @@ Endpoint-specific (when applicable):
 Linear's GraphQL schema is broad and evolving. This section lists the practical domains you should expect to query/mutate.
 
 ### Issues
+
 - List/search/get issues
 - Create/update issues
 - Assign/delegate, set labels, parent/sub-issue links
@@ -115,21 +139,43 @@ Linear's GraphQL schema is broad and evolving. This section lists the practical 
 - Attachments, comments, SLA/triage related metadata
 
 Representative examples:
+
 ```graphql
-query Issues($filter: IssueFilter, $orderBy: IssueOrderBy, $first: Int, $after: String) {
+query Issues(
+  $filter: IssueFilter
+  $orderBy: IssueOrderBy
+  $first: Int
+  $after: String
+) {
   issues(filter: $filter, orderBy: $orderBy, first: $first, after: $after) {
     nodes {
       id
       identifier
       title
       priority
-      state { id name type color }
-      team { id key name }
-      assignee { id name email }
+      state {
+        id
+        name
+        type
+        color
+      }
+      team {
+        id
+        key
+        name
+      }
+      assignee {
+        id
+        name
+        email
+      }
       createdAt
       updatedAt
     }
-    pageInfo { hasNextPage endCursor }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
   }
 }
 ```
@@ -138,18 +184,28 @@ query Issues($filter: IssueFilter, $orderBy: IssueOrderBy, $first: Int, $after: 
 mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
   issueUpdate(id: $id, input: $input) {
     success
-    issue { id identifier title }
+    issue {
+      id
+      identifier
+      title
+    }
   }
 }
 ```
 
 ### Projects + milestones
+
 - List/get/create/update/archive/delete projects
 - Manage lead, state, target dates, teams
 - Query milestones and link issues to milestones
 
 ```graphql
-query Projects($filter: ProjectFilter, $orderBy: ProjectOrderBy, $first: Int, $after: String) {
+query Projects(
+  $filter: ProjectFilter
+  $orderBy: ProjectOrderBy
+  $first: Int
+  $after: String
+) {
   projects(filter: $filter, orderBy: $orderBy, first: $first, after: $after) {
     nodes {
       id
@@ -158,23 +214,39 @@ query Projects($filter: ProjectFilter, $orderBy: ProjectOrderBy, $first: Int, $a
       progress
       startDate
       targetDate
-      lead { id name email }
-      teams { nodes { id key name } }
+      lead {
+        id
+        name
+        email
+      }
+      teams {
+        nodes {
+          id
+          key
+          name
+        }
+      }
     }
-    pageInfo { hasNextPage endCursor }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
   }
 }
 ```
 
 ### Initiatives + roadmap (modern planning layer)
+
 - Roadmap entities exist beyond projects (initiatives and updates).
 - Use schema explorer for exact query/mutation names and current fields in your workspace tier.
 
 ### Customers + requests (modern product feedback layer)
+
 - Customer and customer-request objects are first-class API surfaces.
 - Webhooks include customer/customerRequest events.
 
 ### Teams + workflow states
+
 - List/get teams
 - List team members
 - List/update team workflow statuses
@@ -200,40 +272,54 @@ query TeamStates($key: String!) {
 mutation WorkflowStateUpdate($id: String!, $input: WorkflowStateUpdateInput!) {
   workflowStateUpdate(id: $id, input: $input) {
     success
-    workflowState { id name type color description position }
+    workflowState {
+      id
+      name
+      type
+      color
+      description
+      position
+    }
   }
 }
 ```
 
 ### Users
+
 - Viewer/current-user query
 - Workspace user listing and lookup
 - Admin/active/guest metadata
 
 ### Labels
+
 - Team label listing
 - Create/update/delete labels
 - Parent/group label relationships
 
 ### Comments
+
 - List by issue
 - Create/get/update/delete comment
 
 ### Attachments
+
 - Create URL/PR attachments
 - Rich metadata supported via attachment input payloads
 
 ### Agent sessions + mentions
+
 - Agent session/delegation state is queryable from issue context.
 - Mentioning an agent from issue context is supported (with app scopes for agent actors where applicable).
 
 ### Webhooks
+
 - Manage webhook endpoints via API.
 - Event coverage includes classic issue/project/comment events plus modern domains (initiative, customer, customerRequest, issue SLA, and more).
 
 ## 5) Webhooks: Practical Notes
 
 ### Representative query
+
 ```graphql
 query Webhooks($first: Int, $after: String) {
   webhooks(first: $first, after: $after) {
@@ -244,12 +330,16 @@ query Webhooks($first: Int, $after: String) {
       enabled
       resourceTypes
     }
-    pageInfo { hasNextPage endCursor }
+    pageInfo {
+      hasNextPage
+      endCursor
+    }
   }
 }
 ```
 
 ### Operational guidance
+
 - Verify signatures and reject unsigned payloads.
 - Design handlers to be idempotent.
 - Expect retries and out-of-order arrivals.
@@ -258,6 +348,7 @@ query Webhooks($first: Int, $after: String) {
 ## 6) Filtering + Search Patterns
 
 ### Typical issue filter shape
+
 ```graphql
 {
   team: { id: { eq: "TEAM_ID" } }
@@ -269,6 +360,7 @@ query Webhooks($first: Int, $after: String) {
 ```
 
 ### Common comparators
+
 - `eq`, `neq`
 - `in`, `nin`
 - `contains`, `containsIgnoreCase`
@@ -282,6 +374,7 @@ Always validate exact comparator support per field/type in the schema explorer.
 `linctl` covers a focused subset of the full GraphQL surface.
 
 ### Auth
+
 ```bash
 linctl auth
 linctl auth login
@@ -291,6 +384,7 @@ linctl whoami
 ```
 
 ### Raw GraphQL
+
 ```bash
 linctl graphql [query]
 linctl graphql --query 'query { viewer { id } }'
@@ -299,6 +393,7 @@ cat query.graphql | linctl graphql --variables '{"k":"ENG"}'
 ```
 
 ### Issues
+
 ```bash
 linctl issue list|ls
 linctl issue search|find
@@ -312,6 +407,7 @@ linctl issue attachment download|dl
 ```
 
 ### Projects
+
 ```bash
 linctl project list|ls
 linctl project get|show
@@ -320,7 +416,22 @@ linctl project update
 linctl project delete|rm|remove
 ```
 
+### Initiatives
+
+```bash
+linctl initiative list|ls
+linctl initiative get|show
+linctl initiative create|new
+linctl initiative update
+linctl initiative delete|rm|remove
+linctl initiative archive
+linctl initiative unarchive
+linctl initiative link
+linctl initiative unlink
+```
+
 ### Teams
+
 ```bash
 linctl team list|ls
 linctl team get|show
@@ -330,6 +441,7 @@ linctl team status-update|state-update
 ```
 
 ### Users
+
 ```bash
 linctl user list|ls
 linctl user get|show
@@ -337,6 +449,7 @@ linctl user me
 ```
 
 ### Labels
+
 ```bash
 linctl label list|ls
 linctl label get
@@ -346,6 +459,7 @@ linctl label delete|rm|remove
 ```
 
 ### Comments
+
 ```bash
 linctl comment list|ls
 linctl comment create|add|new
@@ -355,12 +469,14 @@ linctl comment delete|rm|remove
 ```
 
 ### Agents
+
 ```bash
 linctl agent <issue-id>
 linctl agent mention <issue-id> [message...]
 ```
 
 ### Global flags
+
 - `--json, -j`
 - `--plaintext, -p`
 - `--config`
@@ -370,6 +486,7 @@ linctl agent mention <issue-id> [message...]
 ## 8) Gaps Between Full API and linctl
 
 Not all modern Linear API domains are exposed in `linctl` commands yet (for example deeper roadmap/customer/admin/app management surfaces). For unsupported flows:
+
 1. Query schema explorer for exact operation and input names.
 2. Execute the operation via `linctl graphql` so auth/config/output stay in one tool.
 3. Add CLI coverage only when workflow value is clear.
@@ -377,12 +494,14 @@ Not all modern Linear API domains are exposed in `linctl` commands yet (for exam
 ## 9) Reliability Checklist
 
 Before shipping CLI/API docs changes:
+
 1. Validate claims against official docs and schema explorer.
 2. Run `go test ./...`.
 3. For command changes, update `README.md`, `SKILL.md`, and this file in the same PR.
 4. Avoid hardcoding stale limits/scopes unless source-linked.
 
 ## Sources
+
 - https://linear.app/developers/graphql
 - https://linear.app/developers/oauth-2-0-authentication
 - https://linear.app/developers/oauth-actor-authorization
