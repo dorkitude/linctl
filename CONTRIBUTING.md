@@ -18,8 +18,13 @@ Follow this checklist to cut a new release and update Homebrew:
 
 1) Prepare
 - Ensure README and help text match behavior.
+- Update `CHANGELOG.md`:
+  - Move relevant entries from `Unreleased` into the new `vX.Y.Z` section.
+  - Add the release date.
+  - Keep entries user-facing; prefer command names, flags, and behavior changes
+    over internal implementation details.
 - Run `make test` to verify smoke tests pass.
-- Optionally draft release notes (highlights, fixes, breaking changes).
+- Draft release notes from `CHANGELOG.md` (highlights, fixes, breaking changes).
 
 2) Tag and Release (vX.Y.Z)
 - Create tag and push:
@@ -70,4 +75,5 @@ gh pr create --title "linctl: bump to ${TAG}" --body "Update formula to ${TAG}."
 6) Housekeeping
 - Close any issues tied to the release.
 - Start a new milestone if applicable.
-
+- Add a fresh `Unreleased` section to `CHANGELOG.md` if the release process
+  consumed it.
