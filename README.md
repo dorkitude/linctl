@@ -133,6 +133,7 @@ linctl issue create --title "Bug fix" --team ENG
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform"
 linctl issue create --title "Bug fix" --team ENG --project "Q1 Platform" --project-milestone "Phase 1"
 linctl issue create --title "Bug fix" --team ENG --state "In Progress"
+linctl issue create --title "Bug fix" --team ENG --estimate 3
 linctl issue create --title "Bug fix" --team ENG --labels bug,urgent
 linctl issue create --title "Bug fix" --team ENG --delegate agent-runner
 
@@ -147,6 +148,7 @@ linctl issue update LIN-123 --assignee me  # Assign to yourself
 linctl issue update LIN-123 --assignee unassigned  # Remove assignee
 linctl issue update LIN-123 --state "In Progress"
 linctl issue update LIN-123 --priority 1  # 0=None, 1=Urgent, 2=High, 3=Normal, 4=Low
+linctl issue update LIN-123 --estimate 5  # Value depends on team estimation system
 linctl issue update LIN-123 --due-date "2024-12-31"
 linctl issue update LIN-123 --due-date ""  # Remove due date
 linctl issue update LIN-123 --project "Q1 Platform"
@@ -411,6 +413,7 @@ linctl issue new [flags]      # Alias
   -d, --description string Issue description
   -t, --team string        Team key (required)
   --priority int       Priority 0-4 (default 3)
+  -e, --estimate int   Estimate points (depends on team's estimation system)
   -m, --assign-me          Assign to yourself
   -s, --state string       State name (e.g., 'Todo', 'In Progress')
   --delegate string        Delegate to user/agent (email, name, or displayName)
@@ -430,6 +433,7 @@ linctl issue edit <issue-id> [flags]    # Alias
   -a, --assignee string    Assignee (email, name, 'me', or 'unassigned')
   -s, --state string       State name (e.g., 'Todo', 'In Progress', 'Done')
   --priority int           Priority (0=None, 1=Urgent, 2=High, 3=Normal, 4=Low)
+  -e, --estimate int       Estimate points (depends on team's estimation system)
   --due-date string        Due date (YYYY-MM-DD format, or empty to remove)
   --delegate string        Delegate to user/agent (email, name, displayName, or 'none' to remove)
   --labels strings         Replace labels with provided names or IDs (comma-separated)

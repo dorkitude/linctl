@@ -12,13 +12,14 @@ import (
 	"testing"
 
 	"github.com/dorkitude/linctl/pkg/api"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
-func resetIssueCreateStateFlags(t *testing.T) {
+func resetIssueCommandFlags(t *testing.T, command *cobra.Command, names ...string) {
 	t.Helper()
-	for _, name := range []string{"title", "team", "state"} {
-		flag := issueCreateCmd.Flags().Lookup(name)
+	for _, name := range names {
+		flag := command.Flags().Lookup(name)
 		if flag == nil {
 			t.Fatalf("missing flag %q", name)
 		}
@@ -27,6 +28,11 @@ func resetIssueCreateStateFlags(t *testing.T) {
 		}
 		flag.Changed = false
 	}
+}
+
+func resetIssueCreateStateFlags(t *testing.T) {
+	t.Helper()
+	resetIssueCommandFlags(t, issueCreateCmd, "title", "team", "state", "estimate")
 }
 
 func TestIssueCreateCmdStateResolvesToStateID(t *testing.T) {
@@ -86,6 +92,107 @@ func TestIssueCreateCmdStateResolvesToStateID(t *testing.T) {
 
 	if sawStateID != "state-2" {
 		t.Fatalf("expected stateId state-2, got %q", sawStateID)
+	}
+}
+
+func TestIssueCreateCmdEstimateSentInInput(t *testing.T) {
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	t.Setenv("LINCTL_API_KEY", "test-key")
+	viper.Set("plaintext", true)
+	viper.Set("json", false)
+	resetIssueCommandFlags(t, issueCreateCmd, "title", "team", "state", "estimate")
+
+	var sawEstimate float64
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var gqlReq gqlCommandTestRequest
+		if err := json.NewDecoder(req.Body).Decode(&gqlReq); err != nil {
+			t.Fatalf("decode GraphQL request: %v", err)
+		}
+
+		switch {
+		case strings.Contains(gqlReq.Query, "query Team("):
+			body := `{"data":{"team":{"id":"team-1","key":"ENG","name":"Engineering","description":"","private":false,"issueCount":0}}}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		case strings.Contains(gqlReq.Query, "mutation CreateIssue("):
+			input, ok := gqlReq.Variables["input"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected input map, got %#v", gqlReq.Variables["input"])
+			}
+			v, ok := input["estimate"].(float64)
+			if !ok {
+				t.Fatalf("expected estimate in input, got %#v", input["estimate"])
+			}
+			sawEstimate = v
+			body := `{"data":{"issueCreate":{"issue":{"id":"i1","identifier":"ENG-1","title":"Fix bug","description":"","priority":3,"estimate":3,"createdAt":"2026-03-02T00:00:00Z","updatedAt":"2026-03-02T00:00:00Z","dueDate":"","state":{"id":"state-1","name":"Todo","type":"unstarted","color":"#999999"},"assignee":null,"team":{"id":"team-1","key":"ENG","name":"Engineering"},"labels":{"nodes":[]},"project":null,"projectMilestone":null,"parent":null}}}}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		default:
+			t.Fatalf("unexpected GraphQL operation: %s", gqlReq.Query)
+			return nil, nil
+		}
+	})
+
+	_ = issueCreateCmd.Flags().Set("title", "Fix bug")
+	_ = issueCreateCmd.Flags().Set("team", "ENG")
+	_ = issueCreateCmd.Flags().Set("estimate", "3")
+	issueCreateCmd.Run(issueCreateCmd, nil)
+
+	if sawEstimate != 3 {
+		t.Fatalf("expected estimate 3, got %v", sawEstimate)
+	}
+}
+
+func TestIssueUpdateCmdEstimateSentInInput(t *testing.T) {
+	origTransport := http.DefaultTransport
+	defer func() { http.DefaultTransport = origTransport }()
+	t.Setenv("LINCTL_API_KEY", "test-key")
+	viper.Set("plaintext", true)
+	viper.Set("json", false)
+	resetIssueCommandFlags(t, issueUpdateCmd, "title", "description", "assignee", "state", "priority", "due-date", "delegate", "parent", "project", "project-milestone", "estimate")
+
+	var sawEstimate float64
+	http.DefaultTransport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		var gqlReq gqlCommandTestRequest
+		if err := json.NewDecoder(req.Body).Decode(&gqlReq); err != nil {
+			t.Fatalf("decode GraphQL request: %v", err)
+		}
+
+		switch {
+		case strings.Contains(gqlReq.Query, "mutation UpdateIssue("):
+			input, ok := gqlReq.Variables["input"].(map[string]interface{})
+			if !ok {
+				t.Fatalf("expected input map, got %#v", gqlReq.Variables["input"])
+			}
+			v, ok := input["estimate"].(float64)
+			if !ok {
+				t.Fatalf("expected estimate in input, got %#v", input["estimate"])
+			}
+			sawEstimate = v
+			body := `{"data":{"issueUpdate":{"issue":{"id":"i1","identifier":"ENG-1","title":"Fix bug","description":"","priority":3,"estimate":5,"createdAt":"2026-03-02T00:00:00Z","updatedAt":"2026-03-02T00:00:00Z","dueDate":"","state":{"id":"state-1","name":"Todo","type":"unstarted","color":"#999999"},"assignee":null,"team":{"id":"team-1","key":"ENG","name":"Engineering"},"labels":{"nodes":[]},"project":null,"projectMilestone":null,"parent":null}}}}`
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(body)),
+			}, nil
+		default:
+			t.Fatalf("unexpected GraphQL operation: %s", gqlReq.Query)
+			return nil, nil
+		}
+	})
+
+	_ = issueUpdateCmd.Flags().Set("estimate", "5")
+	issueUpdateCmd.Run(issueUpdateCmd, []string{"ENG-1"})
+
+	if sawEstimate != 5 {
+		t.Fatalf("expected estimate 5, got %v", sawEstimate)
 	}
 }
 
@@ -243,5 +350,14 @@ func TestIssueAttachmentFlagsRegistered(t *testing.T) {
 		if issueAttachmentDownloadCmd.Flags().Lookup(name) == nil {
 			t.Fatalf("issue attachment download is missing --%s", name)
 		}
+	}
+}
+
+func TestEstimateFlagRegistered(t *testing.T) {
+	if issueCreateCmd.Flags().Lookup("estimate") == nil {
+		t.Fatal("issue create is missing --estimate flag")
+	}
+	if issueUpdateCmd.Flags().Lookup("estimate") == nil {
+		t.Fatal("issue update is missing --estimate flag")
 	}
 }
