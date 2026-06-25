@@ -18,7 +18,7 @@ var (
 
 // version is set at build time via -ldflags
 // default value is for local dev builds
-var version = "0.1.10-dev"
+var version = "0.1.11-dev"
 
 // generateHeader creates a nice header box with proper Unicode box drawing
 func generateHeader() string {
