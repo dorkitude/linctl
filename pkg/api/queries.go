@@ -241,9 +241,70 @@ type Attachments struct {
 
 // Initiative represents a Linear initiative
 type Initiative struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Description string     `json:"description"`
+	Status      string     `json:"status"`
+	SlugId      string     `json:"slugId"`
+	Color       *string    `json:"color"`
+	Icon        *string    `json:"icon"`
+	URL         string     `json:"url"`
+	TargetDate  *string    `json:"targetDate"`
+	Content     string     `json:"content"`
+	SortOrder   float64    `json:"sortOrder"`
+	CreatedAt   time.Time  `json:"createdAt"`
+	UpdatedAt   time.Time  `json:"updatedAt"`
+	ArchivedAt  *time.Time `json:"archivedAt"`
+	CompletedAt *time.Time `json:"completedAt"`
+	StartedAt   *time.Time `json:"startedAt"`
+	Creator     *User      `json:"creator"`
+	Owner       *User      `json:"owner"`
+	Projects    *Projects  `json:"projects"`
+
+	// Hierarchy
+	ParentInitiative *Initiative  `json:"parentInitiative"`
+	SubInitiatives   *Initiatives `json:"subInitiatives"`
+
+	// Updates
+	InitiativeUpdates *InitiativeUpdates `json:"initiativeUpdates"`
+}
+
+// Initiatives represents a paginated list of initiatives
+type Initiatives struct {
+	Nodes    []Initiative `json:"nodes"`
+	PageInfo PageInfo     `json:"pageInfo"`
+}
+
+// InitiativeToProject represents a link between an initiative and a project
+type InitiativeToProject struct {
+	ID         string     `json:"id"`
+	CreatedAt  time.Time  `json:"createdAt"`
+	UpdatedAt  time.Time  `json:"updatedAt"`
+	ArchivedAt *time.Time `json:"archivedAt"`
+	Project    *Project   `json:"project"`
+	Initiative *Initiative `json:"initiative"`
+	SortOrder  string     `json:"sortOrder"`
+}
+
+// InitiativeToProjects represents a paginated list of initiative-to-project links
+type InitiativeToProjects struct {
+	Nodes    []InitiativeToProject `json:"nodes"`
+	PageInfo PageInfo              `json:"pageInfo"`
+}
+
+// InitiativeUpdates represents a paginated list of initiative updates
+type InitiativeUpdates struct {
+	Nodes []InitiativeUpdateEntry `json:"nodes"`
+}
+
+// InitiativeUpdateEntry represents a status update on an initiative
+type InitiativeUpdateEntry struct {
+	ID        string    `json:"id"`
+	Body      string    `json:"body"`
+	Health    string    `json:"health"`
+	User      *User     `json:"user"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type PageInfo struct {
@@ -2564,3 +2625,484 @@ func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]Issue
 	all = append(all, response.Issue.InverseRelations.Nodes...)
 	return all, nil
 }
+
+// GetInitiatives returns a list of initiatives with optional filtering
+func (c *Client) GetInitiatives(ctx context.Context, filter map[string]interface{}, first int, after string) (*Initiatives, error) {
+	query := `
+		query Initiatives($filter: InitiativeFilter, $first: Int, $after: String) {
+			initiatives(filter: $filter, first: $first, after: $after) {
+				nodes {
+					id
+					name
+					description
+					status
+					slugId
+					url
+					targetDate
+					sortOrder
+					createdAt
+					updatedAt
+					archivedAt
+					completedAt
+					startedAt
+					creator {
+						id
+						name
+						email
+					}
+					owner {
+						id
+						name
+						email
+					}
+					projects {
+						nodes {
+							id
+							name
+							state
+						}
+					}
+				}
+				pageInfo {
+					hasNextPage
+					endCursor
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"first": first,
+	}
+	if filter != nil {
+		variables["filter"] = filter
+	}
+	if after != "" {
+		variables["after"] = after
+	}
+
+	var response struct {
+		Initiatives Initiatives `json:"initiatives"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Initiatives, nil
+}
+
+// GetInitiative returns a single initiative by ID
+func (c *Client) GetInitiative(ctx context.Context, id string) (*Initiative, error) {
+	query := `
+		query Initiative($id: String!) {
+			initiative(id: $id) {
+				id
+				name
+				description
+				status
+				slugId
+				color
+				icon
+				url
+				targetDate
+				content
+				sortOrder
+				createdAt
+				updatedAt
+				archivedAt
+				completedAt
+				startedAt
+				creator {
+					id
+					name
+					email
+					avatarUrl
+					displayName
+				}
+				owner {
+					id
+					name
+					email
+					avatarUrl
+					displayName
+				}
+				projects {
+					nodes {
+						id
+						name
+						description
+						state
+						progress
+						lead {
+							name
+							email
+						}
+					}
+				}
+				parentInitiative {
+					id
+					name
+					status
+				}
+				subInitiatives {
+					nodes {
+						id
+						name
+						status
+						owner {
+							name
+						}
+					}
+				}
+				initiativeUpdates(first: 5) {
+					nodes {
+						id
+						body
+						health
+						user {
+							name
+							email
+						}
+						createdAt
+						updatedAt
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		Initiative Initiative `json:"initiative"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Initiative, nil
+}
+
+// CreateInitiative creates a new initiative
+func (c *Client) CreateInitiative(ctx context.Context, input map[string]interface{}) (*Initiative, error) {
+	query := `
+		mutation CreateInitiative($input: InitiativeCreateInput!) {
+			initiativeCreate(input: $input) {
+				success
+				initiative {
+					id
+					name
+					description
+					status
+					slugId
+					url
+					targetDate
+					createdAt
+					updatedAt
+					owner {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": input,
+	}
+
+	var response struct {
+		InitiativeCreate struct {
+			Success    bool       `json:"success"`
+			Initiative Initiative `json:"initiative"`
+		} `json:"initiativeCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.InitiativeCreate.Initiative, nil
+}
+
+// UpdateInitiative updates an existing initiative
+func (c *Client) UpdateInitiative(ctx context.Context, id string, input map[string]interface{}) (*Initiative, error) {
+	query := `
+		mutation UpdateInitiative($id: String!, $input: InitiativeUpdateInput!) {
+			initiativeUpdate(id: $id, input: $input) {
+				success
+				initiative {
+					id
+					name
+					description
+					status
+					slugId
+					url
+					targetDate
+					createdAt
+					updatedAt
+					owner {
+						id
+						name
+						email
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id":    id,
+		"input": input,
+	}
+
+	var response struct {
+		InitiativeUpdate struct {
+			Success    bool       `json:"success"`
+			Initiative Initiative `json:"initiative"`
+		} `json:"initiativeUpdate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.InitiativeUpdate.Initiative, nil
+}
+
+// DeleteInitiative permanently deletes an initiative
+func (c *Client) DeleteInitiative(ctx context.Context, id string) error {
+	query := `
+		mutation DeleteInitiative($id: String!) {
+			initiativeDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		InitiativeDelete struct {
+			Success bool `json:"success"`
+		} `json:"initiativeDelete"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+
+	if !response.InitiativeDelete.Success {
+		return fmt.Errorf("initiative deletion was not successful")
+	}
+
+	return nil
+}
+
+// ArchiveInitiative archives an initiative
+func (c *Client) ArchiveInitiative(ctx context.Context, id string) (*Initiative, error) {
+	query := `
+		mutation ArchiveInitiative($id: String!) {
+			initiativeArchive(id: $id) {
+				success
+				entity {
+					id
+					name
+					archivedAt
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		InitiativeArchive struct {
+			Success bool       `json:"success"`
+			Entity  Initiative `json:"entity"`
+		} `json:"initiativeArchive"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.InitiativeArchive.Entity, nil
+}
+
+// UnarchiveInitiative restores an archived initiative
+func (c *Client) UnarchiveInitiative(ctx context.Context, id string) (*Initiative, error) {
+	query := `
+		mutation UnarchiveInitiative($id: String!) {
+			initiativeUnarchive(id: $id) {
+				success
+				entity {
+					id
+					name
+					archivedAt
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": id,
+	}
+
+	var response struct {
+		InitiativeUnarchive struct {
+			Success bool       `json:"success"`
+			Entity  Initiative `json:"entity"`
+		} `json:"initiativeUnarchive"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.InitiativeUnarchive.Entity, nil
+}
+
+// LinkInitiativeToProject links an initiative to a project
+func (c *Client) LinkInitiativeToProject(ctx context.Context, initiativeID string, projectID string) (*InitiativeToProject, error) {
+	query := `
+		mutation LinkInitiativeToProject($input: InitiativeToProjectCreateInput!) {
+			initiativeToProjectCreate(input: $input) {
+				success
+				initiativeToProject {
+					id
+					project {
+						id
+						name
+					}
+					initiative {
+						id
+						name
+					}
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"input": map[string]interface{}{
+			"initiativeId": initiativeID,
+			"projectId":    projectID,
+		},
+	}
+
+	var response struct {
+		InitiativeToProjectCreate struct {
+			Success             bool                `json:"success"`
+			InitiativeToProject InitiativeToProject `json:"initiativeToProject"`
+		} `json:"initiativeToProjectCreate"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.InitiativeToProjectCreate.InitiativeToProject, nil
+}
+
+// GetInitiativeToProjectID finds the edge ID linking an initiative to a project
+func (c *Client) GetInitiativeToProjectID(ctx context.Context, initiativeID string, projectID string) (string, error) {
+	query := `
+		query InitiativeToProjects($filter: InitiativeToProjectFilter) {
+			initiativeToProjects(filter: $filter) {
+				nodes {
+					id
+					project { id }
+					initiative { id }
+				}
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"filter": map[string]interface{}{
+			"initiative": map[string]interface{}{
+				"id": map[string]interface{}{"eq": initiativeID},
+			},
+			"project": map[string]interface{}{
+				"id": map[string]interface{}{"eq": projectID},
+			},
+		},
+	}
+
+	var response struct {
+		InitiativeToProjects struct {
+			Nodes []struct {
+				ID string `json:"id"`
+			} `json:"nodes"`
+		} `json:"initiativeToProjects"`
+	}
+
+	err := c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return "", err
+	}
+
+	if len(response.InitiativeToProjects.Nodes) == 0 {
+		return "", fmt.Errorf("no link found between initiative %s and project %s", initiativeID, projectID)
+	}
+
+	return response.InitiativeToProjects.Nodes[0].ID, nil
+}
+
+// UnlinkInitiativeFromProject removes the link between an initiative and a project
+func (c *Client) UnlinkInitiativeFromProject(ctx context.Context, initiativeID string, projectID string) error {
+	// First find the edge ID
+	edgeID, err := c.GetInitiativeToProjectID(ctx, initiativeID, projectID)
+	if err != nil {
+		return err
+	}
+
+	query := `
+		mutation UnlinkInitiativeFromProject($id: String!) {
+			initiativeToProjectDelete(id: $id) {
+				success
+			}
+		}
+	`
+
+	variables := map[string]interface{}{
+		"id": edgeID,
+	}
+
+	var response struct {
+		InitiativeToProjectDelete struct {
+			Success bool `json:"success"`
+		} `json:"initiativeToProjectDelete"`
+	}
+
+	err = c.Execute(ctx, query, variables, &response)
+	if err != nil {
+		return err
+	}
+
+	if !response.InitiativeToProjectDelete.Success {
+		return fmt.Errorf("failed to unlink initiative from project")
+	}
+
+	return nil
+}
+
