@@ -47,6 +47,75 @@ func projectHasTeamKey(project api.Project, teamKey string) bool {
 	return false
 }
 
+func projectStatusLabel(project api.Project) string {
+	if project.Status != nil && project.Status.Name != "" {
+		return project.Status.Name
+	}
+	return project.State
+}
+
+func resolveProjectStatus(ctx context.Context, client *api.Client, value string) (*api.ProjectStatus, error) {
+	statuses, err := client.GetProjectStatuses(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, status := range statuses {
+		if status.ID == value || strings.EqualFold(status.Name, value) {
+			return &status, nil
+		}
+	}
+
+	matchingTypes := make([]api.ProjectStatus, 0, 1)
+	for _, status := range statuses {
+		if strings.EqualFold(status.Type, value) {
+			matchingTypes = append(matchingTypes, status)
+		}
+	}
+	if len(matchingTypes) == 1 {
+		return &matchingTypes[0], nil
+	}
+	if len(matchingTypes) > 1 {
+		return nil, fmt.Errorf("project state type %q is ambiguous; use a named status: %s", value, projectStatusNames(matchingTypes))
+	}
+
+	return nil, fmt.Errorf("project status %q was not found; available statuses: %s", value, projectStatusNames(statuses))
+}
+
+func projectStatusNames(statuses []api.ProjectStatus) string {
+	names := make([]string, 0, len(statuses))
+	for _, status := range statuses {
+		names = append(names, status.Name)
+	}
+	return strings.Join(names, ", ")
+}
+
+func addProjectStatusInput(ctx context.Context, cmd *cobra.Command, client *api.Client, input map[string]interface{}) error {
+	statusChanged := cmd.Flags().Changed("status")
+	stateChanged := cmd.Flags().Changed("state")
+	if statusChanged && stateChanged {
+		return fmt.Errorf("use only one of --status or --state")
+	}
+	if !statusChanged && !stateChanged {
+		return nil
+	}
+
+	flagName := "status"
+	if stateChanged {
+		flagName = "state"
+	}
+	value, err := cmd.Flags().GetString(flagName)
+	if err != nil {
+		return err
+	}
+	status, err := resolveProjectStatus(ctx, client, value)
+	if err != nil {
+		return err
+	}
+	input["statusId"] = status.ID
+	return nil
+}
+
 // projectCmd represents the project command
 var projectCmd = &cobra.Command{
 	Use:   "project",
@@ -188,7 +257,7 @@ var projectListCmd = &cobra.Command{
 			for _, project := range projects.Nodes {
 				fmt.Printf("## %s\n", project.Name)
 				fmt.Printf("- **ID**: %s\n", project.ID)
-				fmt.Printf("- **State**: %s\n", project.State)
+				fmt.Printf("- **State**: %s\n", projectStatusLabel(project))
 				fmt.Printf("- **Progress**: %.0f%%\n", project.Progress*100)
 				if project.Lead != nil {
 					fmt.Printf("- **Lead**: %s\n", project.Lead.Name)
@@ -258,7 +327,7 @@ var projectListCmd = &cobra.Command{
 
 				rows = append(rows, []string{
 					truncateString(project.Name, 25),
-					stateColor.Sprint(project.State),
+					stateColor.Sprint(projectStatusLabel(project)),
 					lead,
 					teams,
 					project.CreatedAt.Format("2006-01-02"),
@@ -326,7 +395,7 @@ var projectGetCmd = &cobra.Command{
 			fmt.Printf("## Core Details\n")
 			fmt.Printf("- **ID**: %s\n", project.ID)
 			fmt.Printf("- **Slug ID**: %s\n", project.SlugId)
-			fmt.Printf("- **State**: %s\n", project.State)
+			fmt.Printf("- **State**: %s\n", projectStatusLabel(*project))
 			fmt.Printf("- **Progress**: %.0f%%\n", project.Progress*100)
 			fmt.Printf("- **Health**: %s\n", project.Health)
 			fmt.Printf("- **Scope**: %d\n", project.Scope)
@@ -534,7 +603,7 @@ var projectGetCmd = &cobra.Command{
 			case "canceled":
 				stateColor = color.New(color.FgRed)
 			}
-			fmt.Printf("\n%s %s\n", color.New(color.Bold).Sprint("State:"), stateColor.Sprint(project.State))
+			fmt.Printf("\n%s %s\n", color.New(color.Bold).Sprint("State:"), stateColor.Sprint(projectStatusLabel(*project)))
 
 			progressColor := color.New(color.FgRed)
 			if project.Progress >= 0.75 {
@@ -643,7 +712,7 @@ Examples:
   linctl project create --name "Q1 Release" --team ENG
   linctl project create --name "Auth Overhaul" --team ENG --description "Rewrite authentication system"
   linctl project create --name "Mobile App" --team ENG --lead me --start-date 2024-01-01 --target-date 2024-06-30
-  linctl project create --name "Bug Bash" --team ENG,QA --state started`,
+  linctl project create --name "Bug Bash" --team ENG,QA --status "Shaping"`,
 	Run: func(cmd *cobra.Command, args []string) {
 		plaintext := viper.GetBool("plaintext")
 		jsonOut := viper.GetBool("json")
@@ -693,21 +762,9 @@ Examples:
 			input["description"] = description
 		}
 
-		if cmd.Flags().Changed("state") {
-			state, _ := cmd.Flags().GetString("state")
-			validStates := []string{"planned", "started", "paused", "completed", "canceled"}
-			isValid := false
-			for _, vs := range validStates {
-				if strings.EqualFold(state, vs) {
-					input["state"] = strings.ToLower(state)
-					isValid = true
-					break
-				}
-			}
-			if !isValid {
-				output.Error(fmt.Sprintf("Invalid state '%s'. Valid states: %s", state, strings.Join(validStates, ", ")), plaintext, jsonOut)
-				os.Exit(1)
-			}
+		if err := addProjectStatusInput(context.Background(), cmd, client, input); err != nil {
+			output.Error(fmt.Sprintf("Failed to resolve project status: %v", err), plaintext, jsonOut)
+			os.Exit(1)
 		}
 
 		if cmd.Flags().Changed("lead") {
@@ -787,7 +844,7 @@ var projectUpdateCmd = &cobra.Command{
 Examples:
   linctl project update abc123 --name "New Name"
   linctl project update abc123 --description "Updated description"
-  linctl project update abc123 --state started
+  linctl project update abc123 --status "Shaping"
   linctl project update abc123 --lead john@company.com
   linctl project update abc123 --target-date 2024-12-31
   linctl project update abc123 --state completed`,
@@ -818,21 +875,9 @@ Examples:
 			input["description"] = description
 		}
 
-		if cmd.Flags().Changed("state") {
-			state, _ := cmd.Flags().GetString("state")
-			validStates := []string{"planned", "started", "paused", "completed", "canceled"}
-			isValid := false
-			for _, vs := range validStates {
-				if strings.EqualFold(state, vs) {
-					input["state"] = strings.ToLower(state)
-					isValid = true
-					break
-				}
-			}
-			if !isValid {
-				output.Error(fmt.Sprintf("Invalid state '%s'. Valid states: %s", state, strings.Join(validStates, ", ")), plaintext, jsonOut)
-				os.Exit(1)
-			}
+		if err := addProjectStatusInput(context.Background(), cmd, client, input); err != nil {
+			output.Error(fmt.Sprintf("Failed to resolve project status: %v", err), plaintext, jsonOut)
+			os.Exit(1)
 		}
 
 		if cmd.Flags().Changed("lead") {
@@ -1040,7 +1085,8 @@ func init() {
 	projectCreateCmd.Flags().String("name", "", "Project name (required)")
 	projectCreateCmd.Flags().StringSliceP("team", "t", []string{}, "Team key(s) (required, comma-separated for multiple)")
 	projectCreateCmd.Flags().StringP("description", "d", "", "Project description")
-	projectCreateCmd.Flags().StringP("state", "s", "", "Initial state (planned, started, paused)")
+	projectCreateCmd.Flags().StringP("state", "s", "", "Initial project status name, ID, or legacy state type")
+	projectCreateCmd.Flags().String("status", "", "Initial named project status or ID (for example, Shaping)")
 	projectCreateCmd.Flags().String("lead", "", "Project lead (email, name, or 'me')")
 	projectCreateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD)")
 	projectCreateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD)")
@@ -1051,7 +1097,8 @@ func init() {
 	// Update command flags
 	projectUpdateCmd.Flags().String("name", "", "New project name")
 	projectUpdateCmd.Flags().StringP("description", "d", "", "New description")
-	projectUpdateCmd.Flags().StringP("state", "s", "", "State (planned, started, paused, completed, canceled)")
+	projectUpdateCmd.Flags().StringP("state", "s", "", "Project status name, ID, or legacy state type")
+	projectUpdateCmd.Flags().String("status", "", "Named project status or ID (for example, Shaping)")
 	projectUpdateCmd.Flags().String("lead", "", "Project lead (email, name, 'me', or 'none' to remove)")
 	projectUpdateCmd.Flags().String("start-date", "", "Start date (YYYY-MM-DD, or empty to remove)")
 	projectUpdateCmd.Flags().String("target-date", "", "Target date (YYYY-MM-DD, or empty to remove)")

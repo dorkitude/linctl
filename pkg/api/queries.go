@@ -97,26 +97,27 @@ type State struct {
 
 // Project represents a Linear project
 type Project struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	State       string     `json:"state"`
-	Progress    float64    `json:"progress"`
-	StartDate   *string    `json:"startDate"`
-	TargetDate  *string    `json:"targetDate"`
-	Lead        *User      `json:"lead"`
-	Teams       *Teams     `json:"teams"`
-	URL         string     `json:"url"`
-	Icon        *string    `json:"icon"`
-	Color       string     `json:"color"`
-	CreatedAt   time.Time  `json:"createdAt"`
-	UpdatedAt   time.Time  `json:"updatedAt"`
-	CompletedAt *time.Time `json:"completedAt"`
-	CanceledAt  *time.Time `json:"canceledAt"`
-	ArchivedAt  *time.Time `json:"archivedAt"`
-	Creator     *User      `json:"creator"`
-	Members     *Users     `json:"members"`
-	Issues      *Issues    `json:"issues"`
+	ID          string         `json:"id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	State       string         `json:"state"`
+	Status      *ProjectStatus `json:"status"`
+	Progress    float64        `json:"progress"`
+	StartDate   *string        `json:"startDate"`
+	TargetDate  *string        `json:"targetDate"`
+	Lead        *User          `json:"lead"`
+	Teams       *Teams         `json:"teams"`
+	URL         string         `json:"url"`
+	Icon        *string        `json:"icon"`
+	Color       string         `json:"color"`
+	CreatedAt   time.Time      `json:"createdAt"`
+	UpdatedAt   time.Time      `json:"updatedAt"`
+	CompletedAt *time.Time     `json:"completedAt"`
+	CanceledAt  *time.Time     `json:"canceledAt"`
+	ArchivedAt  *time.Time     `json:"archivedAt"`
+	Creator     *User          `json:"creator"`
+	Members     *Users         `json:"members"`
+	Issues      *Issues        `json:"issues"`
 	// Additional fields
 	SlugId              string          `json:"slugId"`
 	Content             string          `json:"content"`
@@ -129,6 +130,17 @@ type Project struct {
 	SlackNewIssue       bool            `json:"slackNewIssue"`
 	SlackIssueComments  bool            `json:"slackIssueComments"`
 	SlackIssueStatuses  bool            `json:"slackIssueStatuses"`
+}
+
+// ProjectStatus is the workspace-defined status assigned to a project.
+// State is its broad Linear type (for example, backlog); Name is the
+// workspace-specific label (for example, Shaping).
+type ProjectStatus struct {
+	ID       string  `json:"id"`
+	Name     string  `json:"name"`
+	Type     string  `json:"type"`
+	Color    string  `json:"color"`
+	Position float64 `json:"position"`
 }
 
 // Paginated collections
@@ -719,10 +731,17 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 				}
 				project {
 					id
+				name
+				description
+				state
+				status {
+					id
 					name
-					description
-					state
-					progress
+					type
+					color
+					position
+				}
+				progress
 					startDate
 					targetDate
 					health
@@ -1003,12 +1022,19 @@ func (c *Client) GetProjects(ctx context.Context, filter map[string]interface{},
 	query := `
 		query Projects($filter: ProjectFilter, $first: Int, $after: String, $orderBy: PaginationOrderBy) {
 			projects(filter: $filter, first: $first, after: $after, orderBy: $orderBy) {
-				nodes {
-					id
-					name
-					description
-					state
-					progress
+					nodes {
+						id
+						name
+						description
+						state
+						status {
+							id
+							name
+							type
+							color
+							position
+						}
+						progress
 					startDate
 					targetDate
 					url
@@ -1071,6 +1097,13 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 				description
 				content
 				state
+				status {
+					id
+					name
+					type
+					color
+					position
+				}
 				progress
 				health
 				scope
@@ -1217,6 +1250,35 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 	return &response.Project, nil
 }
 
+// GetProjectStatuses returns the workspace-defined statuses available to projects.
+func (c *Client) GetProjectStatuses(ctx context.Context) ([]ProjectStatus, error) {
+	query := `
+		query ProjectStatuses {
+			projectStatuses {
+				nodes {
+					id
+					name
+					type
+					color
+					position
+				}
+			}
+		}
+	`
+
+	var response struct {
+		ProjectStatuses struct {
+			Nodes []ProjectStatus `json:"nodes"`
+		} `json:"projectStatuses"`
+	}
+
+	if err := c.Execute(ctx, query, nil, &response); err != nil {
+		return nil, err
+	}
+
+	return response.ProjectStatuses.Nodes, nil
+}
+
 // GetProjectMilestones returns all milestones for a specific project.
 func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
 	query := `
@@ -1288,6 +1350,13 @@ func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}
 					name
 					description
 					state
+					status {
+						id
+						name
+						type
+						color
+						position
+					}
 					progress
 					startDate
 					targetDate
@@ -1344,6 +1413,13 @@ func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]
 					description
 					content
 					state
+					status {
+						id
+						name
+						type
+						color
+						position
+					}
 					progress
 					startDate
 					targetDate

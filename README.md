@@ -212,7 +212,7 @@ linctl project list --newer-than all_time
 linctl project get 65a77a62-ec5e-491e-b1d9-84aebee01b33
 
 # Create a project
-linctl project create --name "Q1 Platform" --team ENG --state started
+linctl project create --name "Q1 Platform" --team ENG --status "In Progress"
 
 # Update a project
 linctl project update PROJECT-ID --lead me --target-date 2026-06-30
@@ -563,7 +563,8 @@ linctl project create [flags]
   --name string          Project name (required)
   -t, --team strings     Team key(s) (required)
   -d, --description      Description
-  -s, --state            planned|started|paused
+  -s, --state            project status name, ID, or legacy state type
+      --status string     named project status or ID (for example, Shaping)
   --lead                 email|name|me
   --start-date           YYYY-MM-DD
   --target-date          YYYY-MM-DD
@@ -574,7 +575,8 @@ linctl project update <project-id> [flags]
 # Key flags:
   --name string
   -d, --description
-  -s, --state            planned|started|paused|completed|canceled
+  -s, --state            project status name, ID, or legacy state type
+      --status string     named project status or ID (for example, Shaping)
   --lead                 email|name|me|none
   --start-date           YYYY-MM-DD or empty to clear
   --target-date          YYYY-MM-DD or empty to clear
