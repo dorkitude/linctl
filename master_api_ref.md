@@ -143,6 +143,43 @@ mutation IssueUpdate($id: String!, $input: IssueUpdateInput!) {
 }
 ```
 
+### Issue relations
+- `IssueRelationType` enum: `blocks`, `duplicate`, `related`, `similar`.
+  (`blocked_by` is **not** an API type — it is a CLI convenience that maps to
+  `blocks` with the two issue IDs swapped.)
+- Relations are **directional**, and the direction is the field most often read
+  backwards. Per the schema descriptions (verify via introspection, see §2):
+  - `IssueRelation.issue` — *"The source issue whose relationship is being
+    described. This is the issue from which the relation originates."*
+  - `IssueRelation.relatedIssue` — *"The target issue that the source issue is
+    related to. The relation type describes how the source issue relates to this
+    issue."*
+- So for `type: "blocks"`, **`issue` blocks `relatedIssue`** — `issue` is the
+  blocker, `relatedIssue` is the one that must wait. The same source-acts-on-
+  target convention applies to `duplicate` (`issue` is a duplicate of
+  `relatedIssue`).
+- An issue's `relations` connection holds edges where it is the source;
+  `inverseRelations` holds edges where it is the target. To render a direction-
+  aware label you need both, plus a flag recording which connection each edge
+  came from — the counterpart is `relatedIssue` for forward edges and `issue`
+  for inverse ones.
+- `IssueRelationCreateInput` takes `issueId`, `relatedIssueId`, `type`. Both ID
+  fields accept a UUID or an issue identifier (e.g. `LIN-123`).
+
+```graphql
+mutation IssueRelationCreate($input: IssueRelationCreateInput!) {
+  issueRelationCreate(input: $input) {
+    success
+    issueRelation {
+      id
+      type
+      issue { id identifier }
+      relatedIssue { id identifier }
+    }
+  }
+}
+```
+
 ### Projects + milestones
 - List/get/create/update/archive/delete projects
 - Manage lead, state, target dates, teams

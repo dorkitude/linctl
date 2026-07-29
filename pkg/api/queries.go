@@ -2405,10 +2405,11 @@ func (c *Client) CreateAttachment(ctx context.Context, input map[string]interfac
 }
 
 // CreateIssueRelation creates a relation between two issues.
-// issueID is the issue to add the relation to.
-// relatedIssueID is the other issue in the relation.
-// relationType is one of: "blocks", "duplicate", "related".
-// For "blocks": issueID is blocked by relatedIssueID.
+// issueID is the source issue the relation originates from.
+// relatedIssueID is the target issue the source relates to.
+// relationType is one of: "blocks", "duplicate", "related", "similar".
+// The type describes how the source relates to the target, so for "blocks":
+// issueID blocks relatedIssueID.
 func (c *Client) CreateIssueRelation(ctx context.Context, issueID, relatedIssueID, relationType string) (*IssueRelation, error) {
 	query := `
 		mutation IssueRelationCreate($input: IssueRelationCreateInput!) {

@@ -7,9 +7,36 @@ tags, PR merge commits, and tag-to-tag commit history.
 
 ## [Unreleased]
 
+### Fixed
+
+- Corrected the `blocks` direction across `linctl issue relation`, which was
+  built on an inverted reading of Linear's API. For `type: "blocks"` the `issue`
+  field is the blocker and `relatedIssue` is the blocked issue; the code assumed
+  the reverse. Three user-visible consequences are fixed ([#57]):
+  - `relation add --blocks` / `--blocked-by` stored the opposite relation from
+    the one requested, while the confirmation message reported the requested
+    direction — so the error was invisible from the CLI.
+  - `relation list` labelled blocking relations backwards, reporting the blocker
+    as "blocked by" its own dependent.
+  - `relation list` named the queried issue as its own counterpart for inverse
+    relations, because `relationOtherIssue` ignored the `Inverse` flag.
+- Note for existing users: relations created through earlier versions of
+  `relation add --blocks` are stored inverted in Linear. This release changes
+  what future writes mean relative to that data; verify existing blocking edges
+  in the Linear web UI or via `relation list -j`.
+
+### Changed
+
+- Relation tests previously asserted the inverted behaviour, which is why the
+  bug survived. They are updated to the corrected directions, and gain coverage
+  for inverse-relation counterpart selection and read-direction symmetry.
+
 ### Docs
 
 - Added `CHANGELOG.md` and release guidance for maintaining it.
+- Documented relation direction explicitly in the README relation section.
+
+[#57]: https://github.com/dorkitude/linctl/issues/57
 
 ## [v0.1.10] - 2026-06-25
 
