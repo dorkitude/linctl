@@ -493,6 +493,14 @@ linctl issue relation add LIN-123 --blocked-by LIN-456   # LIN-123 is blocked by
 linctl issue relation list LIN-123 -j                    # JSON output for scripting
 ```
 
+**Direction.** `--blocks` makes the issue you name in the command the blocker;
+`--blocked-by` makes it the blocked one. `relation list` describes each edge from
+the point of view of the issue you queried, so a single edge reads `blocks` from
+the blocker's end and `blocked by` from the other end, each line naming the
+issue at the far end. In `-j` output the raw shape is
+`issue --type--> relatedIssue`, i.e. for `"blocks"` the `issue` field is the
+blocker.
+
 ### Agent Commands
 ```bash
 # View agent delegation/session for an issue
