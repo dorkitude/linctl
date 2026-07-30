@@ -43,3 +43,6 @@ dist/
 .env.test
 coverage.out
 coverage.html
+
+# Claude Code directory
+.claude/
