@@ -69,6 +69,10 @@ linctl issue search "<query>" --newer-than all_time --include-completed --includ
 # Project inventory without default date filter
 linctl project list --newer-than all_time --json
 
+# Create or update a project with the exact workspace-defined status.
+linctl project create --name "Custom Properties" --team END --lead me --status "Shaping"
+linctl project update <project-id> --status "Shaping"
+
 # Team labels for resolution/validation
 linctl label list --team <TEAM_KEY> --json
 

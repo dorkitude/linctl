@@ -12,7 +12,7 @@ import (
 
 func resetProjectUpdateFlags(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"name", "description", "state", "lead", "start-date", "target-date", "color", "content"} {
+	for _, name := range []string{"name", "description", "state", "status", "lead", "start-date", "target-date", "color", "content"} {
 		flag := projectUpdateCmd.Flags().Lookup(name)
 		if flag == nil {
 			t.Fatalf("missing flag %q", name)
