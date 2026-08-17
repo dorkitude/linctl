@@ -361,3 +361,37 @@ func TestEstimateFlagRegistered(t *testing.T) {
 		t.Fatal("issue update is missing --estimate flag")
 	}
 }
+
+func TestBuildIssueFilterAcceptsTeamURL(t *testing.T) {
+	resetIssueCommandFlags(t, issueListCmd, "team")
+	_ = issueListCmd.Flags().Set("team", "https://linear.app/glif/team/API/active")
+	defer resetIssueCommandFlags(t, issueListCmd, "team")
+
+	filter := buildIssueFilter(issueListCmd)
+	team, ok := filter["team"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected a team filter, got %#v", filter["team"])
+	}
+	key, ok := team["key"].(map[string]interface{})
+	if !ok || key["eq"] != "API" {
+		t.Fatalf("expected team key API, got %#v", team["key"])
+	}
+}
+
+func TestFindProjectByNameOrIDMatchesSlugID(t *testing.T) {
+	projects := []api.Project{
+		{ID: "uuid-1", Name: "Benchmarkmaxx", SlugId: "d05c5c7e8a5c"},
+		{ID: "uuid-2", Name: "Agent Evals", SlugId: "4c5eb664551d"},
+	}
+
+	for _, value := range []string{"benchmarkmaxx-d05c5c7e8a5c", "d05c5c7e8a5c", "Benchmarkmaxx", "uuid-1"} {
+		project := findProjectByNameOrID(projects, value)
+		if project == nil || project.ID != "uuid-1" {
+			t.Fatalf("findProjectByNameOrID(%q) = %#v, want uuid-1", value, project)
+		}
+	}
+
+	if project := findProjectByNameOrID(projects, "not-a-project"); project != nil {
+		t.Fatalf("expected no match, got %#v", project)
+	}
+}

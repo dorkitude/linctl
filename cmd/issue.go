@@ -848,7 +848,12 @@ func buildIssueFilter(cmd *cobra.Command) map[string]interface{} {
 	}
 
 	if team, _ := cmd.Flags().GetString("team"); team != "" {
-		filter["team"] = map[string]interface{}{"key": map[string]interface{}{"eq": team}}
+		teamKey, err := api.NormalizeTeamRef(team)
+		if err != nil {
+			output.Error(err.Error(), viper.GetBool("plaintext"), viper.GetBool("json"))
+			os.Exit(1)
+		}
+		filter["team"] = map[string]interface{}{"key": map[string]interface{}{"eq": teamKey}}
 	}
 
 	if priority, _ := cmd.Flags().GetInt("priority"); priority != -1 {
@@ -984,6 +989,13 @@ func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
 		}
 	}
 
+	// Project URLs carry a slug id, either bare or suffixed onto the project name.
+	for i := range projects {
+		if slugID := projects[i].SlugId; slugID != "" && (normalized == slugID || strings.HasSuffix(normalized, "-"+slugID)) {
+			return &projects[i]
+		}
+	}
+
 	return nil
 }
 
@@ -1023,6 +1035,11 @@ func listAllProjects(ctx context.Context, client *api.Client) ([]api.Project, er
 }
 
 func resolveProjectID(ctx context.Context, client *api.Client, projectValue string) (string, error) {
+	projectValue, err := api.NormalizeProjectRef(projectValue)
+	if err != nil {
+		return "", err
+	}
+
 	projects, err := listAllProjects(ctx, client)
 	if err != nil {
 		return "", err
