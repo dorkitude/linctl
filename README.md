@@ -74,41 +74,21 @@ This improves performance and prevents overwhelming data loads. To see older ite
 - Need archived matches? Add `--include-archived` when using `issue search`.
 
 
-## Pasting Linear URLs
+## Pasting URLs
 
-Anywhere `linctl` takes an issue, project, team or comment reference, you can paste
-the URL straight from the Linear web app instead of looking up the ID.
+You can use Linear URLs anywhere `linctl` accepts an issue, project, team or comment.
 
 ```bash
-# Issue URLs, with or without the title slug
 linctl issue get https://linear.app/acme/issue/ENG-123/fix-the-thing
-linctl issue update https://linear.app/acme/issue/ENG-123 --state "In Progress"
-
-# Comment URLs (use Linear's "Copy link" on the comment itself)
 linctl comment get 'https://linear.app/acme/issue/ENG-123/fix-the-thing#comment-b68a4bf5'
-
-# Project and team URLs
 linctl project get https://linear.app/acme/project/roadmap-d05c5c7e8a5c/overview
 linctl issue list --team https://linear.app/acme/team/ENG/active
-
-# GitHub pull request URLs resolve to the issue the PR is attached to
 linctl issue get https://github.com/acme/api/pull/6153
 ```
 
-This works for flags too, such as `--team`, `--project` and `--parent`. Bare
-identifiers (`ENG-123`), UUIDs, team keys and project names keep working exactly as
-before.
-
-Document and initiative URLs are recognised too, so you get a clear error rather than
-a confusing one when you paste them at a command that wants an issue.
-
-Two things to know:
-
-- Quote URLs that contain a `#`, or your shell will strip the comment fragment.
-- Linear review URLs (`linear.app/acme/review/...`) cannot be resolved. They point at
-  a pull request, and Linear's API cannot map one back to an issue. Pass the GitHub
-  pull request URL instead. The error also suggests an `issue search` built from the
-  review slug, which usually finds the issue in one go.
+Quote URLs containing `#`. GitHub pull request URLs resolve through their Linear
+attachment. Linear review URLs do not expose the pull request URL, so use the GitHub
+URL instead.
 
 
 ## Quick Start

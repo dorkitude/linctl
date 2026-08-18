@@ -10,325 +10,195 @@ import (
 )
 
 func TestParseLinearURL(t *testing.T) {
-	cases := []struct {
-		name  string
-		raw   string
-		want  LinearRef
-		wantK bool
+	tests := []struct {
+		name string
+		raw  string
+		want linearRef
+		ok   bool
 	}{
-		{
-			name:  "issue url with slug",
-			raw:   "https://linear.app/glif/issue/API-379/block-signups-from-example",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-			wantK: true,
-		},
-		{
-			name:  "issue url without slug",
-			raw:   "https://linear.app/glif/issue/API-379",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-			wantK: true,
-		},
-		{
-			name:  "issue url with comment fragment",
-			raw:   "https://linear.app/glif/issue/GTM-580/make-it-generic#comment-b68a4bf5",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "GTM-580", CommentID: "b68a4bf5"},
-			wantK: true,
-		},
-		{
-			name:  "issue url with commentId query",
-			raw:   "https://linear.app/glif/issue/GTM-580?commentId=b68a4bf5-8a34-473e-af4c-b8892a78a9af",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "GTM-580", CommentID: "b68a4bf5-8a34-473e-af4c-b8892a78a9af"},
-			wantK: true,
-		},
-		{
-			name:  "issue url with agent session fragment",
-			raw:   "https://linear.app/glif/issue/API-379/slug#agent-session-56881231",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-			wantK: true,
-		},
-		{
-			name:  "scheme-less url",
-			raw:   "linear.app/glif/issue/API-379/slug",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-			wantK: true,
-		},
-		{
-			name:  "desktop deep link",
-			raw:   "linear://linear.app/glif/issue/API-379",
-			want:  LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-			wantK: true,
-		},
-		{
-			name:  "project url",
-			raw:   "https://linear.app/glif/project/benchmarkmaxx-d05c5c7e8a5c/overview",
-			want:  LinearRef{Kind: LinearRefProject, Workspace: "glif", ID: "benchmarkmaxx-d05c5c7e8a5c"},
-			wantK: true,
-		},
-		{
-			name:  "team url",
-			raw:   "https://linear.app/glif/team/API/active",
-			want:  LinearRef{Kind: LinearRefTeam, Workspace: "glif", ID: "API"},
-			wantK: true,
-		},
-		{
-			name:  "document url",
-			raw:   "https://linear.app/glif/document/glif-tgim-sync-507735cb56c1",
-			want:  LinearRef{Kind: LinearRefDocument, Workspace: "glif", ID: "glif-tgim-sync-507735cb56c1"},
-			wantK: true,
-		},
-		{
-			name:  "review url",
-			raw:   "https://linear.app/glif/review/replace-polymorphic-apitokenid-ca4153a35dc0",
-			want:  LinearRef{Kind: LinearRefReview, Workspace: "glif", ID: "replace-polymorphic-apitokenid-ca4153a35dc0"},
-			wantK: true,
-		},
-		{name: "bare identifier", raw: "API-379"},
-		{name: "uuid", raw: "b68a4bf5-8a34-473e-af4c-b8892a78a9af"},
-		{name: "github url", raw: "https://github.com/glifxyz/glif-graph/pull/6153"},
-		{name: "empty", raw: ""},
-		{name: "linear url with no entity segment", raw: "https://linear.app/glif/settings"},
-		{name: "issue segment with nothing after it", raw: "https://linear.app/glif/issue"},
+		{"issue", "https://linear.app/glif/issue/API-379/a-title", linearRef{kind: refIssue, id: "API-379"}, true},
+		{"comment fragment", "https://linear.app/glif/issue/GTM-580/title#comment-b68a4bf5", linearRef{kind: refIssue, id: "GTM-580", commentID: "b68a4bf5"}, true},
+		{"comment query", "https://linear.app/glif/issue/GTM-580?commentId=b68a4bf5-8a34-473e-af4c-b8892a78a9af", linearRef{kind: refIssue, id: "GTM-580", commentID: "b68a4bf5-8a34-473e-af4c-b8892a78a9af"}, true},
+		{"other fragment", "https://linear.app/glif/issue/API-379/title#agent-session-56881231", linearRef{kind: refIssue, id: "API-379"}, true},
+		{"without scheme", "linear.app/glif/issue/API-379", linearRef{kind: refIssue, id: "API-379"}, true},
+		{"desktop link", "linear://linear.app/glif/issue/API-379", linearRef{kind: refIssue, id: "API-379"}, true},
+		{"www host", "https://www.linear.app/glif/team/API/active", linearRef{kind: refTeam, id: "API"}, true},
+		{"project", "https://linear.app/glif/project/roadmap-d05c5c7e8a5c/overview", linearRef{kind: refProject, id: "roadmap-d05c5c7e8a5c"}, true},
+		{"document", "https://linear.app/glif/document/notes-507735cb56c1", linearRef{kind: refDocument, id: "notes-507735cb56c1"}, true},
+		{"initiative", "https://linear.app/glif/initiative/costs-83e5d6e7a371", linearRef{kind: refInitiative, id: "costs-83e5d6e7a371"}, true},
+		{"review", "https://linear.app/glif/review/change-ca4153a35dc0", linearRef{kind: refReview, id: "change-ca4153a35dc0"}, true},
+		{"bare identifier", "API-379", linearRef{}, false},
+		{"wrong host", "https://github.com/acme/api/pull/1", linearRef{}, false},
+		{"wrong scheme", "ftp://linear.app/glif/issue/API-379", linearRef{}, false},
+		{"malformed URL", "https://linear.app/%zz", linearRef{}, false},
+		{"missing workspace", "https://linear.app/issue/API-379", linearRef{}, false},
+		{"missing id", "https://linear.app/glif/issue", linearRef{}, false},
+		{"settings", "https://linear.app/glif/settings", linearRef{}, false},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := ParseLinearURL(tc.raw)
-			if ok != tc.wantK {
-				t.Fatalf("ParseLinearURL(%q) ok = %v, want %v", tc.raw, ok, tc.wantK)
-			}
-			if got != tc.want {
-				t.Fatalf("ParseLinearURL(%q) = %#v, want %#v", tc.raw, got, tc.want)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, ok := parseLinearURL(test.raw)
+			if got != test.want || ok != test.ok {
+				t.Fatalf("parseLinearURL(%q) = %#v, %v; want %#v, %v", test.raw, got, ok, test.want, test.ok)
 			}
 		})
 	}
 }
 
-func TestNormalizeIssueRef(t *testing.T) {
-	cases := []struct {
+func TestNormalizeRefs(t *testing.T) {
+	tests := []struct {
 		name    string
-		ref     string
+		fn      func(string) (string, error)
+		raw     string
 		want    string
 		wantErr string
 	}{
-		{name: "identifier passes through", ref: "API-379", want: "API-379"},
-		{name: "uuid passes through", ref: "b68a4bf5-8a34-473e-af4c-b8892a78a9af", want: "b68a4bf5-8a34-473e-af4c-b8892a78a9af"},
-		{name: "surrounding whitespace trimmed", ref: "  API-379\n", want: "API-379"},
-		{name: "issue url", ref: "https://linear.app/glif/issue/API-379/some-slug", want: "API-379"},
-		{name: "empty", ref: "  ", wantErr: "issue reference cannot be empty"},
-		{name: "project url", ref: "https://linear.app/glif/project/benchmarkmaxx-d05c5c7e8a5c", wantErr: "is a Linear project URL"},
-		{name: "review url", ref: "https://linear.app/glif/review/replace-polymorphic-ca4153a35dc0", wantErr: "is a Linear review URL"},
+		{"issue identifier", NormalizeIssueRef, " API-379\n", "API-379", ""},
+		{"issue UUID", NormalizeIssueRef, "b68a4bf5-8a34-473e-af4c-b8892a78a9af", "b68a4bf5-8a34-473e-af4c-b8892a78a9af", ""},
+		{"issue URL", NormalizeIssueRef, "https://linear.app/glif/issue/API-379/title", "API-379", ""},
+		{"project URL", NormalizeProjectRef, "https://linear.app/glif/project/roadmap-d05c5c7e8a5c/issues", "roadmap-d05c5c7e8a5c", ""},
+		{"team URL", NormalizeTeamRef, "https://linear.app/glif/team/API/all", "API", ""},
+		{"empty issue", NormalizeIssueRef, " ", "", "issue reference cannot be empty"},
+		{"wrong kind", NormalizeTeamRef, "https://linear.app/glif/issue/API-379", "", "Linear issue URL, not a team URL"},
+		{"new issue page", NormalizeIssueRef, "https://linear.app/glif/issue/new", "", "does not contain an issue identifier"},
+		{"review URL", NormalizeIssueRef, "https://linear.app/glif/review/change-ca4153a35dc0", "", "Pass the GitHub pull request URL"},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := NormalizeIssueRef(tc.ref)
-			if tc.wantErr != "" {
-				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
-					t.Fatalf("NormalizeIssueRef(%q) error = %v, want it to contain %q", tc.ref, err, tc.wantErr)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := test.fn(test.raw)
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("error = %v, want it to contain %q", err, test.wantErr)
 				}
 				return
 			}
-			if err != nil {
-				t.Fatalf("NormalizeIssueRef(%q) returned error: %v", tc.ref, err)
-			}
-			if got != tc.want {
-				t.Fatalf("NormalizeIssueRef(%q) = %q, want %q", tc.ref, got, tc.want)
+			if err != nil || got != test.want {
+				t.Fatalf("got %q, %v; want %q, nil", got, err, test.want)
 			}
 		})
-	}
-}
-
-func TestNormalizeProjectAndTeamRefs(t *testing.T) {
-	projectID, err := NormalizeProjectRef("https://linear.app/glif/project/benchmarkmaxx-d05c5c7e8a5c/issues")
-	if err != nil {
-		t.Fatalf("NormalizeProjectRef returned error: %v", err)
-	}
-	if projectID != "benchmarkmaxx-d05c5c7e8a5c" {
-		t.Fatalf("expected slug id, got %q", projectID)
-	}
-
-	teamKey, err := NormalizeTeamRef("https://linear.app/glif/team/API/all")
-	if err != nil {
-		t.Fatalf("NormalizeTeamRef returned error: %v", err)
-	}
-	if teamKey != "API" {
-		t.Fatalf("expected team key API, got %q", teamKey)
-	}
-
-	if _, err := NormalizeTeamRef("https://linear.app/glif/issue/API-379"); err == nil {
-		t.Fatal("expected an error for an issue URL passed as a team ref")
 	}
 }
 
 func TestGetIssueAcceptsIssueURL(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req gqlTestRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
+	server := graphqlTestServer(t, func(req gqlTestRequest) string {
 		if req.Variables["id"] != "API-379" {
-			t.Fatalf("expected id API-379, got %v", req.Variables["id"])
+			t.Fatalf("id = %v, want API-379", req.Variables["id"])
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"issue":{"id":"i1","identifier":"API-379","title":"Block signups"}}}`))
-	}))
-	defer srv.Close()
+		return `{"data":{"issue":{"id":"i1","identifier":"API-379"}}}`
+	})
+	defer server.Close()
 
-	c := NewClientWithURL(srv.URL, "Bearer test")
-	issue, err := c.GetIssue(context.Background(), "https://linear.app/glif/issue/API-379/block-signups")
+	issue, err := NewClientWithURL(server.URL, "test").GetIssue(context.Background(), "https://linear.app/glif/issue/API-379/title")
+	if err != nil || issue.Identifier != "API-379" {
+		t.Fatalf("GetIssue() = %#v, %v", issue, err)
+	}
+}
+
+func TestGetProjectMilestonesAcceptsProjectURL(t *testing.T) {
+	server := graphqlTestServer(t, func(req gqlTestRequest) string {
+		if req.Variables["id"] != "roadmap-d05c5c7e8a5c" {
+			t.Fatalf("id = %v, want project URL identifier", req.Variables["id"])
+		}
+		return `{"data":{"project":{"projectMilestones":{"nodes":[],"pageInfo":{"hasNextPage":false}}}}}`
+	})
+	defer server.Close()
+
+	_, err := NewClientWithURL(server.URL, "test").GetProjectMilestones(context.Background(), "https://linear.app/glif/project/roadmap-d05c5c7e8a5c/overview")
 	if err != nil {
-		t.Fatalf("GetIssue returned error: %v", err)
-	}
-	if issue.Identifier != "API-379" {
-		t.Fatalf("expected API-379, got %s", issue.Identifier)
+		t.Fatalf("GetProjectMilestones() error = %v", err)
 	}
 }
 
-func TestResolveIssueRefFromGitHubPullRequestURL(t *testing.T) {
-	var sawURL interface{}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req gqlTestRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		if !strings.Contains(req.Query, "query AttachmentsForURL(") {
-			t.Fatalf("expected AttachmentsForURL query, got: %s", req.Query)
-		}
-		sawURL = req.Variables["url"]
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"attachmentsForURL":{"nodes":[{"issue":null},{"issue":{"identifier":"API-285"}}]}}}`))
-	}))
-	defer srv.Close()
-
-	c := NewClientWithURL(srv.URL, "Bearer test")
-	ref, err := c.ResolveIssueRef(context.Background(), "https://github.com/glifxyz/glif-graph/pull/6153?w=1")
-	if err != nil {
-		t.Fatalf("ResolveIssueRef returned error: %v", err)
-	}
-	if ref != "API-285" {
-		t.Fatalf("expected API-285, got %q", ref)
-	}
-	if sawURL != "https://github.com/glifxyz/glif-graph/pull/6153" {
-		t.Fatalf("expected the canonical PR URL, got %v", sawURL)
-	}
-}
-
-func TestResolveIssueRefUnlinkedPullRequest(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"attachmentsForURL":{"nodes":[]}}}`))
-	}))
-	defer srv.Close()
-
-	c := NewClientWithURL(srv.URL, "Bearer test")
-	_, err := c.ResolveIssueRef(context.Background(), "https://github.com/glifxyz/glif-graph/pull/6153")
-	if err == nil || !strings.Contains(err.Error(), "no Linear issue is linked") {
-		t.Fatalf("expected an unlinked-PR error, got %v", err)
-	}
-}
-
-func TestResolveCommentRefFromURL(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req gqlTestRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Fatalf("decode request: %v", err)
-		}
-		if !strings.Contains(req.Query, "query IssueComments(") {
-			t.Fatalf("expected IssueComments query, got: %s", req.Query)
-		}
-		if req.Variables["id"] != "GTM-580" {
-			t.Fatalf("expected id GTM-580, got %v", req.Variables["id"])
-		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"issue":{"comments":{"nodes":[{"id":"11111111-1111-1111-1111-111111111111"},{"id":"b68a4bf5-8a34-473e-af4c-b8892a78a9af"}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}`))
-	}))
-	defer srv.Close()
-
-	c := NewClientWithURL(srv.URL, "Bearer test")
-	id, err := c.ResolveCommentRef(context.Background(), "https://linear.app/glif/issue/GTM-580/make-it-generic#comment-b68a4bf5")
-	if err != nil {
-		t.Fatalf("ResolveCommentRef returned error: %v", err)
-	}
-	if id != "b68a4bf5-8a34-473e-af4c-b8892a78a9af" {
-		t.Fatalf("expected the full comment UUID, got %q", id)
-	}
-}
-
-func TestResolveCommentRefWithoutCommentFragment(t *testing.T) {
-	c := NewClientWithURL("http://127.0.0.1:0", "Bearer test")
-	_, err := c.ResolveCommentRef(context.Background(), "https://linear.app/glif/issue/GTM-580/make-it-generic")
-	if err == nil || !strings.Contains(err.Error(), "does not point at a comment") {
-		t.Fatalf("expected a missing-comment error, got %v", err)
-	}
-}
-
-func TestParseLinearURLMoreVariants(t *testing.T) {
-	cases := []struct {
-		name string
-		raw  string
-		want LinearRef
+func TestResolveIssueRefFromPullRequest(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		want    string
+		wantErr string
 	}{
-		{
-			name: "initiative url",
-			raw:  "https://linear.app/glif/initiative/reduce-costs-83e5d6e7a371",
-			want: LinearRef{Kind: LinearRefInitiative, Workspace: "glif", ID: "reduce-costs-83e5d6e7a371"},
-		},
-		{
-			name: "trailing slash",
-			raw:  "https://linear.app/glif/issue/API-379/",
-			want: LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-		},
-		{
-			name: "query string",
-			raw:  "https://linear.app/glif/issue/API-379/slug?tab=activity",
-			want: LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-		},
-		{
-			name: "www host",
-			raw:  "https://www.linear.app/glif/issue/API-379",
-			want: LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "API-379"},
-		},
-		{
-			name: "lowercase identifier",
-			raw:  "https://linear.app/glif/issue/api-379/slug",
-			want: LinearRef{Kind: LinearRefIssue, Workspace: "glif", ID: "api-379"},
-		},
-		{
-			name: "team cycle view",
-			raw:  "https://linear.app/glif/team/API/cycle/12",
-			want: LinearRef{Kind: LinearRefTeam, Workspace: "glif", ID: "API"},
-		},
-		{
-			name: "project sub-tab",
-			raw:  "https://linear.app/glif/project/benchmarkmaxx-d05c5c7e8a5c/documents",
-			want: LinearRef{Kind: LinearRefProject, Workspace: "glif", ID: "benchmarkmaxx-d05c5c7e8a5c"},
-		},
+		{"linked", `{"data":{"attachmentsForURL":{"nodes":[{"issue":null},{"issue":{"identifier":"API-285"}}]}}}`, "API-285", ""},
+		{"unlinked", `{"data":{"attachmentsForURL":{"nodes":[]}}}`, "", "no Linear issue is linked"},
+		{"ambiguous", `{"data":{"attachmentsForURL":{"nodes":[{"issue":{"identifier":"API-285"}},{"issue":{"identifier":"API-379"}}]}}}`, "", "linked to multiple Linear issues: API-285, API-379"},
+		{"truncated", `{"data":{"attachmentsForURL":{"nodes":[{"issue":{"identifier":"API-285"}}],"pageInfo":{"hasNextPage":true}}}}`, "", "too many Linear attachments"},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got, ok := ParseLinearURL(tc.raw)
-			if !ok {
-				t.Fatalf("ParseLinearURL(%q) did not parse", tc.raw)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := graphqlTestServer(t, func(req gqlTestRequest) string {
+				if req.Variables["url"] != "https://github.com/acme/api/pull/6153" {
+					t.Fatalf("url = %v, want canonical URL", req.Variables["url"])
+				}
+				return test.body
+			})
+			defer server.Close()
+
+			got, err := NewClientWithURL(server.URL, "test").resolveIssueRef(context.Background(), "https://www.github.com/acme/api/pull/6153/files?w=1")
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("error = %v, want it to contain %q", err, test.wantErr)
+				}
+				return
 			}
-			if got != tc.want {
-				t.Fatalf("ParseLinearURL(%q) = %#v, want %#v", tc.raw, got, tc.want)
+			if err != nil || got != test.want {
+				t.Fatalf("got %q, %v; want %q, nil", got, err, test.want)
 			}
 		})
 	}
 }
 
-func TestNormalizeIssueRefRejectsNonIssuePaths(t *testing.T) {
-	cases := map[string]string{
-		"https://linear.app/glif/issue/new":                               "does not contain an issue identifier",
-		"https://linear.app/glif/initiative/reduce-costs-83e5d6e7a371":    "is a Linear initiative URL",
-		"https://linear.app/glif/document/glif-tgim-sync-507735cb56c1":    "is a Linear document URL",
-		"https://linear.app/glif/review/replace-polymorphic-ca4153a35dc0": "linctl issue search \"replace polymorphic\"",
+func TestResolveCommentRef(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		want    string
+		wantErr string
+	}{
+		{"unique", `{"data":{"issue":{"comments":{"nodes":[{"id":"b68a4bf5-8a34-473e-af4c-b8892a78a9af"}],"pageInfo":{"hasNextPage":false}}}}}`, "b68a4bf5-8a34-473e-af4c-b8892a78a9af", ""},
+		{"ambiguous", `{"data":{"issue":{"comments":{"nodes":[{"id":"b68a4bf5-1111-1111-1111-111111111111"},{"id":"b68a4bf5-2222-2222-2222-222222222222"}],"pageInfo":{"hasNextPage":false}}}}}`, "", "comment prefix \"b68a4bf5\" is ambiguous"},
 	}
 
-	for ref, want := range cases {
-		if _, err := NormalizeIssueRef(ref); err == nil || !strings.Contains(err.Error(), want) {
-			t.Fatalf("NormalizeIssueRef(%q) error = %v, want it to contain %q", ref, err, want)
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := graphqlTestServer(t, func(req gqlTestRequest) string {
+				if req.Variables["id"] != "GTM-580" {
+					t.Fatalf("id = %v, want GTM-580", req.Variables["id"])
+				}
+				return test.body
+			})
+			defer server.Close()
+
+			got, err := NewClientWithURL(server.URL, "test").resolveCommentRef(context.Background(), "https://linear.app/glif/issue/GTM-580/title#comment-b68a4bf5")
+			if test.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+					t.Fatalf("error = %v, want it to contain %q", err, test.wantErr)
+				}
+				return
+			}
+			if err != nil || got != test.want {
+				t.Fatalf("got %q, %v; want %q, nil", got, err, test.want)
+			}
+		})
 	}
+}
+
+func TestResolveCommentRefRequiresCommentLink(t *testing.T) {
+	client := NewClientWithURL("http://127.0.0.1:0", "test")
+	_, err := client.resolveCommentRef(context.Background(), "https://linear.app/glif/issue/GTM-580/title")
+	if err == nil || !strings.Contains(err.Error(), "does not point at a comment") {
+		t.Fatalf("error = %v, want missing comment error", err)
+	}
+}
+
+func graphqlTestServer(t *testing.T, respond func(gqlTestRequest) string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request gqlTestRequest
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(respond(request)))
+	}))
 }

@@ -975,8 +975,6 @@ func isUnsetValue(value string) bool {
 		return false
 	}
 }
-
-
 func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
 	normalized := strings.TrimSpace(value)
 	if normalized == "" {
@@ -984,15 +982,10 @@ func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
 	}
 
 	for i := range projects {
-		if projects[i].ID == normalized || strings.EqualFold(projects[i].Name, normalized) {
-			return &projects[i]
-		}
-	}
-
-	// Project URLs carry a slug id, either bare or suffixed onto the project name.
-	for i := range projects {
-		if slugID := projects[i].SlugId; slugID != "" && (normalized == slugID || strings.HasSuffix(normalized, "-"+slugID)) {
-			return &projects[i]
+		project := &projects[i]
+		if project.ID == normalized || strings.EqualFold(project.Name, normalized) ||
+			project.SlugId == normalized || (project.SlugId != "" && strings.HasSuffix(normalized, "-"+project.SlugId)) {
+			return project
 		}
 	}
 

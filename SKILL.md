@@ -14,9 +14,8 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 - Before writing, inspect current state first (`get` / `list --json`).
 - Use command-specific help for exact flags and validation rules: `linctl <command> <subcommand> --help`.
 - Be explicit with filters; defaults can hide expected results.
-- Linear web app URLs work anywhere an issue, project, team or comment reference is
-  accepted, including flags such as `--team` and `--project`. A GitHub pull request
-  URL resolves to the issue it is attached to. Quote URLs containing `#`.
+- Linear and attached GitHub pull request URLs work as entity references. Quote URLs
+  containing `#`.
 
 ## High-Impact Gotchas
 
@@ -25,8 +24,7 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 - `issue search` may also need `--include-archived` for archived matches.
 - `issue list --cycle current` can validly return no rows if no active cycle exists.
 - Parent/sub-issue links are set via `issue update --parent` (not `issue create`).
-- Linear review URLs (`linear.app/<workspace>/review/...`) cannot be resolved. They
-  point at a pull request, which Linear's API cannot map back to an issue.
+- Use the GitHub pull request URL instead of a Linear review URL.
 - If results look incomplete, retry with:
   - `--newer-than all_time`
   - `--include-completed`

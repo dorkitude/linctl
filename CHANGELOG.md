@@ -9,17 +9,8 @@ tags, PR merge commits, and tag-to-tag commit history.
 
 ### Added
 
-- Linear web app URLs are now accepted anywhere `linctl` takes an issue, project,
-  team or comment reference, including flags such as `--team`, `--project` and
-  `--parent`. Issue, project, document, initiative and team URLs are parsed locally;
-  comment URLs (`...#comment-b68a4bf5`) are resolved to the full comment ID. Bare
-  identifiers, UUIDs, team keys and project names are unchanged.
-- A GitHub pull request URL passed as an issue reference resolves to the issue the
-  PR is attached to.
-- Linear review URLs (`linear.app/<workspace>/review/...`) now fail with an
-  explanation instead of a generic not-found: they point at a pull request, which
-  Linear's API cannot map back to an issue. The error suggests an `issue search`
-  built from the review slug.
+- Accept Linear URLs for issue, project, team and comment references. GitHub pull
+  request URLs also resolve to their attached Linear issue.
 
 ## [v0.1.11] - 2026-07-29
 

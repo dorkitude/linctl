@@ -603,7 +603,7 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 
 // GetIssue returns a single issue by ID
 func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
-	id, err := c.ResolveIssueRef(ctx, id)
+	id, err := c.resolveIssueRef(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -884,7 +884,7 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 
 // GetIssueAgentSession returns issue delegate and agent sessions in recent comments.
 func (c *Client) GetIssueAgentSession(ctx context.Context, issueID string) (*Issue, error) {
-	issueID, err := c.ResolveIssueRef(ctx, issueID)
+	issueID, err := c.resolveIssueRef(ctx, issueID)
 	if err != nil {
 		return nil, err
 	}
@@ -1235,6 +1235,11 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 
 // GetProjectMilestones returns all milestones for a specific project.
 func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
+	projectID, err := NormalizeProjectRef(projectID)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query ProjectMilestones($id: String!, $first: Int, $after: String) {
 			project(id: $id) {
@@ -1278,7 +1283,7 @@ func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]
 			} `json:"project"`
 		}
 
-		err := c.Execute(ctx, query, variables, &response)
+		err = c.Execute(ctx, query, variables, &response)
 		if err != nil {
 			return nil, err
 		}
@@ -1488,7 +1493,7 @@ func (c *Client) ArchiveProject(ctx context.Context, id string) (*Project, error
 
 // UpdateIssue updates an issue's fields
 func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]interface{}) (*Issue, error) {
-	id, err := c.ResolveIssueRef(ctx, id)
+	id, err := c.resolveIssueRef(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2184,7 +2189,7 @@ func (c *Client) FindUserByIdentifier(ctx context.Context, identifier string) (*
 
 // GetIssueComments returns comments for a specific issue
 func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int, after string, orderBy string) (*Comments, error) {
-	issueID, err := c.ResolveIssueRef(ctx, issueID)
+	issueID, err := c.resolveIssueRef(ctx, issueID)
 	if err != nil {
 		return nil, err
 	}
@@ -2240,7 +2245,7 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 
 // CreateComment creates a new comment on an issue
 func (c *Client) CreateComment(ctx context.Context, issueID string, body string) (*Comment, error) {
-	issueID, err := c.ResolveIssueRef(ctx, issueID)
+	issueID, err := c.resolveIssueRef(ctx, issueID)
 	if err != nil {
 		return nil, err
 	}
@@ -2288,7 +2293,7 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 
 // GetComment returns a single comment by ID.
 func (c *Client) GetComment(ctx context.Context, id string) (*Comment, error) {
-	id, err := c.ResolveCommentRef(ctx, id)
+	id, err := c.resolveCommentRef(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2331,7 +2336,7 @@ func (c *Client) GetComment(ctx context.Context, id string) (*Comment, error) {
 
 // UpdateComment updates an existing comment by ID.
 func (c *Client) UpdateComment(ctx context.Context, id string, body string) (*Comment, error) {
-	id, err := c.ResolveCommentRef(ctx, id)
+	id, err := c.resolveCommentRef(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -2386,7 +2391,7 @@ func (c *Client) UpdateComment(ctx context.Context, id string, body string) (*Co
 
 // DeleteComment deletes a comment by ID.
 func (c *Client) DeleteComment(ctx context.Context, id string) error {
-	id, err := c.ResolveCommentRef(ctx, id)
+	id, err := c.resolveCommentRef(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -2577,7 +2582,7 @@ func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) err
 
 // GetIssueRelations returns all relations for a given issue.
 func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]IssueRelation, error) {
-	issueID, err := c.ResolveIssueRef(ctx, issueID)
+	issueID, err := c.resolveIssueRef(ctx, issueID)
 	if err != nil {
 		return nil, err
 	}
