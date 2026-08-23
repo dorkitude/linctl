@@ -7,6 +7,27 @@ tags, PR merge commits, and tag-to-tag commit history.
 
 ## [Unreleased]
 
+## [v0.1.12] - 2026-08-23
+
+### Added
+
+- Added `--status` to `linctl project create` and `linctl project update` for
+  selecting an exact workspace-defined project status by name or ID.
+
+### Fixed
+
+- Replaced the hard-coded project state validator with live project-status
+  resolution and the current `statusId` mutation input.
+- Preserved `--state` compatibility while rejecting ambiguous legacy state
+  types and directing users to an exact named status.
+- Displayed the workspace-defined project status name instead of only Linear's
+  generic legacy state type.
+
+### Docs
+
+- Updated project command examples and the agent playbook for exact named
+  project statuses.
+
 ## [v0.1.11] - 2026-07-29
 
 ### Fixed
@@ -218,7 +239,8 @@ tags, PR merge commits, and tag-to-tag commit history.
 
 - Refined root command header rendering.
 
-[Unreleased]: https://github.com/dorkitude/linctl/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/dorkitude/linctl/compare/v0.1.12...HEAD
+[v0.1.12]: https://github.com/dorkitude/linctl/compare/v0.1.11...v0.1.12
 [v0.1.11]: https://github.com/dorkitude/linctl/compare/v0.1.10...v0.1.11
 [v0.1.10]: https://github.com/dorkitude/linctl/compare/v0.1.9...v0.1.10
 [v0.1.9]: https://github.com/dorkitude/linctl/compare/v0.1.8...v0.1.9
