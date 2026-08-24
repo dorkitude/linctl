@@ -14,6 +14,8 @@ Use this skill when the user wants to inspect or modify Linear data through `lin
 - Before writing, inspect current state first (`get` / `list --json`).
 - Use command-specific help for exact flags and validation rules: `linctl <command> <subcommand> --help`.
 - Be explicit with filters; defaults can hide expected results.
+- Linear URLs work as entity references. Quote URLs containing `#`. Also GitHub pull
+  request URLs, but only if it's attached to a Linear issue.
 
 ## High-Impact Gotchas
 
