@@ -76,7 +76,7 @@ This improves performance and prevents overwhelming data loads. To see older ite
 
 ## Pasting URLs
 
-You can use Linear URLs anywhere `linctl` accepts an issue, project, team or comment.
+Paste Linear URLs anywhere `linctl` takes an issue, project, team or comment.
 
 ```bash
 linctl issue get https://linear.app/acme/issue/ENG-123/fix-the-thing
@@ -86,9 +86,8 @@ linctl issue list --team https://linear.app/acme/team/ENG/active
 linctl issue get https://github.com/acme/api/pull/6153
 ```
 
-Quote URLs containing `#`. GitHub pull request URLs resolve through their Linear
-attachment. Linear review URLs (`/review/...`) are not references: they do not expose
-the pull request URL, so use the GitHub URL instead.
+Quote URLs containing `#`. GitHub PR URLs will work as well, but only if one is
+attached to an existing Linear issue.
 
 
 ## Quick Start

@@ -9,8 +9,8 @@ tags, PR merge commits, and tag-to-tag commit history.
 
 ### Added
 
-- Accept Linear URLs for issue, project, team and comment references. GitHub pull
-  request URLs also resolve to their attached Linear issue.
+- Accept Linear URLs as issue, project, team and comment references, plus GitHub PR
+  URLs attached to a Linear issue.
 
 ## [v0.1.12] - 2026-08-23
 
