@@ -87,8 +87,8 @@ linctl issue get https://github.com/acme/api/pull/6153
 ```
 
 Quote URLs containing `#`. GitHub pull request URLs resolve through their Linear
-attachment. Linear review URLs do not expose the pull request URL, so use the GitHub
-URL instead.
+attachment. Linear review URLs (`/review/...`) are not references: they do not expose
+the pull request URL, so use the GitHub URL instead.
 
 
 ## Quick Start
