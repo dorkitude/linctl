@@ -848,7 +848,12 @@ func buildIssueFilter(cmd *cobra.Command) map[string]interface{} {
 	}
 
 	if team, _ := cmd.Flags().GetString("team"); team != "" {
-		filter["team"] = map[string]interface{}{"key": map[string]interface{}{"eq": team}}
+		teamKey, err := api.NormalizeTeamRef(team)
+		if err != nil {
+			output.Error(err.Error(), viper.GetBool("plaintext"), viper.GetBool("json"))
+			os.Exit(1)
+		}
+		filter["team"] = map[string]interface{}{"key": map[string]interface{}{"eq": teamKey}}
 	}
 
 	if priority, _ := cmd.Flags().GetInt("priority"); priority != -1 {
@@ -970,8 +975,6 @@ func isUnsetValue(value string) bool {
 		return false
 	}
 }
-
-
 func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
 	normalized := strings.TrimSpace(value)
 	if normalized == "" {
@@ -979,8 +982,10 @@ func findProjectByNameOrID(projects []api.Project, value string) *api.Project {
 	}
 
 	for i := range projects {
-		if projects[i].ID == normalized || strings.EqualFold(projects[i].Name, normalized) {
-			return &projects[i]
+		project := &projects[i]
+		if project.ID == normalized || strings.EqualFold(project.Name, normalized) ||
+			project.SlugId == normalized || (project.SlugId != "" && strings.HasSuffix(normalized, "-"+project.SlugId)) {
+			return project
 		}
 	}
 
@@ -1023,6 +1028,11 @@ func listAllProjects(ctx context.Context, client *api.Client) ([]api.Project, er
 }
 
 func resolveProjectID(ctx context.Context, client *api.Client, projectValue string) (string, error) {
+	projectValue, err := api.NormalizeProjectRef(projectValue)
+	if err != nil {
+		return "", err
+	}
+
 	projects, err := listAllProjects(ctx, client)
 	if err != nil {
 		return "", err

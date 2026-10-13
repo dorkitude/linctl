@@ -74,6 +74,22 @@ This improves performance and prevents overwhelming data loads. To see older ite
 - Need archived matches? Add `--include-archived` when using `issue search`.
 
 
+## Pasting URLs
+
+Paste Linear URLs anywhere `linctl` takes an issue, project, team or comment.
+
+```bash
+linctl issue get https://linear.app/acme/issue/ENG-123/fix-the-thing
+linctl comment get 'https://linear.app/acme/issue/ENG-123/fix-the-thing#comment-b68a4bf5'
+linctl project get https://linear.app/acme/project/roadmap-d05c5c7e8a5c/overview
+linctl issue list --team https://linear.app/acme/team/ENG/active
+linctl issue get https://github.com/acme/api/pull/6153
+```
+
+Quote URLs containing `#`. GitHub PR URLs will work as well, but only if one is
+attached to an existing Linear issue.
+
+
 ## Quick Start
 
 > **IMPORTANT**  Agents like Claude Code, Cursor, and Gemini should use the `--json` flag on all read operations.

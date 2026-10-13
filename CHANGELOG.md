@@ -7,6 +7,12 @@ tags, PR merge commits, and tag-to-tag commit history.
 
 ## [Unreleased]
 
+### Added
+
+- Accept Linear URLs as issue, project, team and comment references, plus GitHub PR
+  URLs attached to a Linear issue. e.g.
+  `linctl issue get https://linear.app/acme/issue/ENG-123/fix-the-thing`
+
 ## [v0.1.12] - 2026-08-23
 
 ### Added

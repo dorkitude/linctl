@@ -615,6 +615,11 @@ func (c *Client) IssueSearch(ctx context.Context, term string, filter map[string
 
 // GetIssue returns a single issue by ID
 func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
+	id, err := c.resolveIssueRef(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query Issue($id: String!) {
 			issue(id: $id) {
@@ -888,7 +893,7 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 		Issue Issue `json:"issue"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -898,6 +903,11 @@ func (c *Client) GetIssue(ctx context.Context, id string) (*Issue, error) {
 
 // GetIssueAgentSession returns issue delegate and agent sessions in recent comments.
 func (c *Client) GetIssueAgentSession(ctx context.Context, issueID string) (*Issue, error) {
+	issueID, err := c.resolveIssueRef(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query IssueAgentSession($id: String!) {
 			issue(id: $id) {
@@ -966,7 +976,7 @@ func (c *Client) GetIssueAgentSession(ctx context.Context, issueID string) (*Iss
 		Issue Issue `json:"issue"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -1022,19 +1032,20 @@ func (c *Client) GetProjects(ctx context.Context, filter map[string]interface{},
 	query := `
 		query Projects($filter: ProjectFilter, $first: Int, $after: String, $orderBy: PaginationOrderBy) {
 			projects(filter: $filter, first: $first, after: $after, orderBy: $orderBy) {
-					nodes {
+				nodes {
+					id
+					slugId
+					name
+					description
+					state
+					status {
 						id
 						name
-						description
-						state
-						status {
-							id
-							name
-							type
-							color
-							position
-						}
-						progress
+						type
+						color
+						position
+					}
+					progress
 					startDate
 					targetDate
 					url
@@ -1088,6 +1099,11 @@ func (c *Client) GetProjects(ctx context.Context, filter map[string]interface{},
 
 // GetProject returns a single project by ID
 func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
+	id, err := NormalizeProjectRef(id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query Project($id: String!) {
 			project(id: $id) {
@@ -1242,7 +1258,7 @@ func (c *Client) GetProject(ctx context.Context, id string) (*Project, error) {
 		Project Project `json:"project"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -1281,6 +1297,11 @@ func (c *Client) GetProjectStatuses(ctx context.Context) ([]ProjectStatus, error
 
 // GetProjectMilestones returns all milestones for a specific project.
 func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]ProjectMilestone, error) {
+	projectID, err := NormalizeProjectRef(projectID)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query ProjectMilestones($id: String!, $first: Int, $after: String) {
 			project(id: $id) {
@@ -1324,7 +1345,7 @@ func (c *Client) GetProjectMilestones(ctx context.Context, projectID string) ([]
 			} `json:"project"`
 		}
 
-		err := c.Execute(ctx, query, variables, &response)
+		err = c.Execute(ctx, query, variables, &response)
 		if err != nil {
 			return nil, err
 		}
@@ -1403,6 +1424,11 @@ func (c *Client) CreateProject(ctx context.Context, input map[string]interface{}
 
 // UpdateProject updates an existing project
 func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]interface{}) (*Project, error) {
+	id, err := NormalizeProjectRef(id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		mutation UpdateProject($id: String!, $input: ProjectUpdateInput!) {
 			projectUpdate(id: $id, input: $input) {
@@ -1457,7 +1483,7 @@ func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]
 		} `json:"projectUpdate"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -1467,6 +1493,11 @@ func (c *Client) UpdateProject(ctx context.Context, id string, input map[string]
 
 // DeleteProject permanently deletes a project
 func (c *Client) DeleteProject(ctx context.Context, id string) error {
+	id, err := NormalizeProjectRef(id)
+	if err != nil {
+		return err
+	}
+
 	query := `
 		mutation DeleteProject($id: String!) {
 			projectDelete(id: $id) {
@@ -1485,7 +1516,7 @@ func (c *Client) DeleteProject(ctx context.Context, id string) error {
 		} `json:"projectDelete"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return err
 	}
@@ -1499,6 +1530,11 @@ func (c *Client) DeleteProject(ctx context.Context, id string) error {
 
 // ArchiveProject archives a project (soft delete)
 func (c *Client) ArchiveProject(ctx context.Context, id string) (*Project, error) {
+	id, err := NormalizeProjectRef(id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		mutation ArchiveProject($id: String!) {
 			projectArchive(id: $id) {
@@ -1523,7 +1559,7 @@ func (c *Client) ArchiveProject(ctx context.Context, id string) (*Project, error
 		} `json:"projectArchive"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -1533,6 +1569,11 @@ func (c *Client) ArchiveProject(ctx context.Context, id string) (*Project, error
 
 // UpdateIssue updates an issue's fields
 func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]interface{}) (*Issue, error) {
+	id, err := c.resolveIssueRef(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		mutation UpdateIssue($id: String!, $input: IssueUpdateInput!) {
 			issueUpdate(id: $id, input: $input) {
@@ -1600,7 +1641,7 @@ func (c *Client) UpdateIssue(ctx context.Context, id string, input map[string]in
 		} `json:"issueUpdate"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -1686,6 +1727,11 @@ func (c *Client) CreateIssue(ctx context.Context, input map[string]interface{}) 
 
 // GetTeam returns a single team by key
 func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
+	key, err := NormalizeTeamRef(key)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query Team($key: String!) {
 			team(id: $key) {
@@ -1707,7 +1753,7 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
 		Team Team `json:"team"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -1717,6 +1763,11 @@ func (c *Client) GetTeam(ctx context.Context, key string) (*Team, error) {
 
 // GetTeamLabels returns all issue labels for a team key.
 func (c *Client) GetTeamLabels(ctx context.Context, teamKey string) ([]Label, error) {
+	teamKey, err := NormalizeTeamRef(teamKey)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query TeamLabels($key: String!, $first: Int, $after: String) {
 			team(id: $key) {
@@ -1976,6 +2027,11 @@ type WorkflowState struct {
 
 // GetTeamStates returns workflow states for a team
 func (c *Client) GetTeamStates(ctx context.Context, teamKey string) ([]WorkflowState, error) {
+	teamKey, err := NormalizeTeamRef(teamKey)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query TeamStates($key: String!) {
 			team(id: $key) {
@@ -2005,7 +2061,7 @@ func (c *Client) GetTeamStates(ctx context.Context, teamKey string) ([]WorkflowS
 		} `json:"team"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -2056,6 +2112,11 @@ func (c *Client) UpdateWorkflowState(ctx context.Context, id string, input map[s
 
 // GetTeamMembers returns members of a specific team
 func (c *Client) GetTeamMembers(ctx context.Context, teamKey string) (*Users, error) {
+	teamKey, err := NormalizeTeamRef(teamKey)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query TeamMembers($key: String!) {
 			team(id: $key) {
@@ -2088,7 +2149,7 @@ func (c *Client) GetTeamMembers(ctx context.Context, teamKey string) (*Users, er
 		} `json:"team"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -2204,6 +2265,11 @@ func (c *Client) FindUserByIdentifier(ctx context.Context, identifier string) (*
 
 // GetIssueComments returns comments for a specific issue
 func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int, after string, orderBy string) (*Comments, error) {
+	issueID, err := c.resolveIssueRef(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query IssueComments($id: String!, $first: Int, $after: String, $orderBy: PaginationOrderBy) {
 			issue(id: $id) {
@@ -2245,7 +2311,7 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 		} `json:"issue"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -2255,6 +2321,11 @@ func (c *Client) GetIssueComments(ctx context.Context, issueID string, first int
 
 // CreateComment creates a new comment on an issue
 func (c *Client) CreateComment(ctx context.Context, issueID string, body string) (*Comment, error) {
+	issueID, err := c.resolveIssueRef(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		mutation CreateComment($input: CommentCreateInput!) {
 			commentCreate(input: $input) {
@@ -2288,7 +2359,7 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 		} `json:"commentCreate"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -2298,6 +2369,11 @@ func (c *Client) CreateComment(ctx context.Context, issueID string, body string)
 
 // GetComment returns a single comment by ID.
 func (c *Client) GetComment(ctx context.Context, id string) (*Comment, error) {
+	id, err := c.resolveCommentRef(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query Comment($id: String!) {
 			comment(id: $id) {
@@ -2326,7 +2402,7 @@ func (c *Client) GetComment(ctx context.Context, id string) (*Comment, error) {
 		Comment Comment `json:"comment"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -2336,6 +2412,11 @@ func (c *Client) GetComment(ctx context.Context, id string) (*Comment, error) {
 
 // UpdateComment updates an existing comment by ID.
 func (c *Client) UpdateComment(ctx context.Context, id string, body string) (*Comment, error) {
+	id, err := c.resolveCommentRef(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		mutation UpdateComment($id: String!, $input: CommentUpdateInput!) {
 			commentUpdate(id: $id, input: $input) {
@@ -2373,7 +2454,7 @@ func (c *Client) UpdateComment(ctx context.Context, id string, body string) (*Co
 		} `json:"commentUpdate"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
@@ -2386,6 +2467,11 @@ func (c *Client) UpdateComment(ctx context.Context, id string, body string) (*Co
 
 // DeleteComment deletes a comment by ID.
 func (c *Client) DeleteComment(ctx context.Context, id string) error {
+	id, err := c.resolveCommentRef(ctx, id)
+	if err != nil {
+		return err
+	}
+
 	query := `
 		mutation DeleteComment($id: String!) {
 			commentDelete(id: $id) {
@@ -2404,7 +2490,7 @@ func (c *Client) DeleteComment(ctx context.Context, id string) error {
 		} `json:"commentDelete"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return err
 	}
@@ -2572,6 +2658,11 @@ func (c *Client) DeleteIssueRelation(ctx context.Context, relationID string) err
 
 // GetIssueRelations returns all relations for a given issue.
 func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]IssueRelation, error) {
+	issueID, err := c.resolveIssueRef(ctx, issueID)
+	if err != nil {
+		return nil, err
+	}
+
 	query := `
 		query IssueRelations($id: String!) {
 			issue(id: $id) {
@@ -2626,7 +2717,7 @@ func (c *Client) GetIssueRelations(ctx context.Context, issueID string) ([]Issue
 		} `json:"issue"`
 	}
 
-	err := c.Execute(ctx, query, variables, &response)
+	err = c.Execute(ctx, query, variables, &response)
 	if err != nil {
 		return nil, err
 	}
